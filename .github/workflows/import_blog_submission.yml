@@ -1,0 +1,35 @@
+name: Import Blog Submission
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to import'
+        required: true
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm install gray-matter slugify node-fetch@2 file-type sharp @octokit/rest
+
+      - name: Run import script
+        run: node scripts/import_submission.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}

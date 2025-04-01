@@ -1,0 +1,141 @@
+// import_submission.js (PR-based version)
+
+const { Octokit } = require("@octokit/rest");
+const matter = require("gray-matter");
+const slugify = require("slugify");
+const fs = require("fs");
+const path = require("path");
+const fetch = require("node-fetch");
+const FileType = require("file-type");
+const sharp = require("sharp");
+const { execSync } = require("child_process");
+
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+
+async function run() {
+  const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+  const issueNumber = process.env.ISSUE_NUMBER;
+
+  const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
+  const body = issue.body;
+  const username = issue.user.login;
+
+  const parsed = matter(body);
+  const { data, content } = parsed;
+
+  if (!data.submission || data.submission !== true) {
+    console.error("Not a flagged submission. Aborting.");
+    return;
+  }
+
+  const slug = slugify(data.title || `submission-${issueNumber}`, { lower: true, strict: true }) || `submission-${issueNumber}`;
+  const date = new Date().toISOString().split("T")[0];
+  const postDir = `content/posts/${date}-${slug}`;
+  const imageDir = `${postDir}/images`;
+
+  fs.mkdirSync(imageDir, { recursive: true });
+
+  const imageRegex = /!\[(.*?)\]\((https:\/\/user-images\.githubusercontent\.com\/[^)]+)\)/g;
+  const images = [...content.matchAll(imageRegex)];
+
+  let updatedContent = content;
+
+  for (const [match, alt, url] of images) {
+    try {
+      const imageUrl = new URL(url);
+      if (
+        imageUrl.hostname !== "user-images.githubusercontent.com" ||
+        imageUrl.search ||
+        imageUrl.hash ||
+        !/\/(featured|image)-[\w-]+\.(png|jpg|jpeg)$/.test(imageUrl.pathname)
+      ) {
+        throw new Error(`Invalid image URL format: ${url}`);
+      }
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
+
+      const buffer = await res.buffer();
+      const type = await FileType.fromBuffer(buffer);
+      if (!type || !["image/png", "image/jpeg"].includes(type.mime)) {
+        throw new Error(`Invalid MIME type for image: ${type?.mime}`);
+      }
+
+      const image = sharp(buffer);
+      const metadata = await image.metadata();
+      const ratio = metadata.width / metadata.height;
+      if (Math.abs(ratio - 16 / 9) > 0.05) {
+        throw new Error(`Image must be 16:9 ratio. Found: ${metadata.width}x${metadata.height}`);
+      }
+
+      const filename = path.basename(imageUrl.pathname);
+      const localPath = `./images/${filename}`;
+      const fullLocalPath = path.join(imageDir, filename);
+
+      const cleaned = await image.toFormat(type.ext).toBuffer();
+      fs.writeFileSync(fullLocalPath, cleaned);
+
+      updatedContent = updatedContent.replace(url, localPath);
+    } catch (err) {
+      console.error(`❌ Skipping image due to error: ${err.message}`);
+      await octokit.issues.createComment({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        body: `⚠️ One of your images could not be imported: ${err.message}`
+      });
+      return;
+    }
+  }
+
+  const finalFrontmatter = {
+    title: data.title,
+    description: data.description,
+    author: data.author,
+    subject: data.subject,
+    featuredImage: `./images/${path.basename(data.featuredImage)}`,
+    publishDate: date,
+  };
+
+  const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
+  fs.writeFileSync(`${postDir}/index.md`, finalMarkdown);
+
+  const branchName = `submissions/issue-${issueNumber}-${slug}`.substring(0, 60);
+
+  execSync(`git config user.name "github-actions"`);
+  execSync(`git config user.email "github-actions@github.com"`);
+  execSync(`git checkout -b ${branchName}`);
+  execSync(`git add ${postDir}`);
+  execSync(`git commit -m "feat(blog): import submission from issue #${issueNumber}"`);
+  execSync(`git push origin ${branchName}`);
+
+  const pr = await octokit.pulls.create({
+    owner,
+    repo,
+    title: `Blog Submission from @${username} — “${data.title}”`,
+    head: branchName,
+    base: "main",
+    body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
+  });
+
+  await octokit.issues.createComment({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    body: `✅ Submission has been imported and staged in [PR #${pr.data.number}](${pr.data.html_url}).`
+  });
+
+  await octokit.issues.addLabels({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    labels: ["imported"]
+  });
+
+  console.log(`✅ Opened PR #${pr.data.number} from branch ${branchName}`);
+}
+
+run().catch(err => {
+  console.error("❌ Import failed:", err);
+  process.exit(1);
+});

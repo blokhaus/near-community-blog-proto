@@ -1,0 +1,60 @@
+name: Generate Blog Preview
+
+on:
+  pull_request:
+    paths:
+      - 'content/posts/**/index.md'
+
+jobs:
+  preview:
+    if: startsWith(github.head_ref, 'submissions/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Markdown Renderer
+        run: |
+          npm install -g markdown-to-html
+
+      - name: Find submitted post
+        id: find-post
+        run: |
+          FILE=$(git diff --name-only origin/main | grep 'content/posts/.*/index.md' | head -n 1 || true)
+          echo "found_file=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Convert Markdown to HTML
+        if: steps.find-post.outputs.found_file != ''
+        run: |
+          mkdir -p preview
+          markdown-to-html ${{ steps.find-post.outputs.found_file }} > preview/preview.html
+
+      - name: Upload Preview Artifact
+        if: steps.find-post.outputs.found_file != ''
+        uses: actions/upload-artifact@v3
+        with:
+          name: blog-preview
+          path: preview/preview.html
+
+      - name: Comment with Preview Link
+        if: steps.find-post.outputs.found_file != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const artifactUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📄 A preview of this blog post has been generated.
+
+👉 [Click here to view the artifact](${artifactUrl}) (look under 'Artifacts' section)`
+            });

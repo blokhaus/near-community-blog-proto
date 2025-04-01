@@ -1,0 +1,5 @@
+# Protect critical paths — only @jameswjr can approve changes for now
+
+/scripts/                 @jameswjr
+/.github/workflows/       @jameswjr
+/content/posts/           @jameswjr
