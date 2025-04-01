@@ -1,0 +1,17 @@
+{
+  "name": "near-community-blog",
+  "version": "1.0.0",
+  "description": "Welcome to the official community-powered blog for the NEAR ecosystem. This repository serves as the central platform for community blog contribution.",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "Blokhaus Team",
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "gray-matter": "^4.0.3"
+  }
+}
