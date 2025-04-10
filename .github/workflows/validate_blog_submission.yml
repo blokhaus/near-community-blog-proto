@@ -2,10 +2,11 @@ name: Validate Blog Submission
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   validate:

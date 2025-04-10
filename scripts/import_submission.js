@@ -1,4 +1,4 @@
-// import_submission.js (with helper integration)
+// import_submission.js (with helper integration + close + lock issue)
 
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
@@ -19,9 +19,8 @@ async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const issueNumber = process.env.ISSUE_NUMBER;
 
-  const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
-  const body = issue.body;
-  const username = issue.user.login;
+  const body = process.env.ISSUE_BODY;
+  const username = process.env.ISSUE_USER;
 
   const parsed = matter(body);
   const { data, content } = parsed;
@@ -102,11 +101,20 @@ async function run() {
   const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
   fs.writeFileSync(path.join(postDir, "index.md"), finalMarkdown);
 
+  const pr = await octokit.pulls.create({
+    owner,
+    repo,
+    title: `Blog Submission from @${username} — “${data.title}”`,
+    head: `submissions/issue-${issueNumber}-${slug}`.substring(0, 60),
+    base: "main",
+    body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
+  });
+
   await octokit.issues.createComment({
     owner,
     repo,
     issue_number: issueNumber,
-    body: `✅ Submission imported to \`${postDir}/index.md\`. Ready for publication.`
+    body: `✅ Submission has been converted into [PR #${pr.data.number}](${pr.data.html_url}).\n\nThis issue is now closed and locked. Please follow further discussion in the PR.`
   });
 
   await octokit.issues.addLabels({
@@ -114,6 +122,20 @@ async function run() {
     repo,
     issue_number: issueNumber,
     labels: ["imported"]
+  });
+
+  await octokit.issues.update({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    state: "closed"
+  });
+
+  await octokit.issues.lock({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    lock_reason: "resolved"
   });
 
   console.log(`✅ Imported submission to ${postDir}`);

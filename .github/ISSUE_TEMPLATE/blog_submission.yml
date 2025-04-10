@@ -12,15 +12,30 @@ body:
 
         - ✅ Use **Markdown only** — **no raw HTML**
         - ✅ Start your post with a **frontmatter block** (see example below)
-        - ✅ Include **1–2 inline images** (GitHub drag-and-drop)
-        - ✅ Include a **featured image** — also uploaded here
-        - ✅ Images must use this naming:
-          - `featured-[name].png` or `.jpg`
-          - `image-[name].png` or `.jpg`
-        - ✅ Category must be one of:
+        - ✅ Include **0–2 inline images** and **one featured image** (in PNG or JPG format)
+        - ✅ Subject must be one of:
           - `Community`, `Developers`, `Ecosystem`, `DAOs`, `NFTs`, `Gaming`, `Web3 Gaming`, `User-Owned AI`
         - ✅ You must include: `submission: true` in your frontmatter
         - ❌ Only one open submission per user is allowed
+
+        ---
+
+        🖼 **Uploading Images**
+
+        To include images in your blog post:
+
+        - ✅ Drag and drop them into the editor box below
+        - ✅ Or paste from your clipboard (⌘+V / Ctrl+V)
+        - ✅ GitHub will upload them and insert Markdown like:
+
+          ```markdown
+          ![Alt text](https://user-images.githubusercontent.com/.../image-1.png)
+          ```
+
+        ⛔ Do not upload more than **2 inline images**
+        📌 Use this naming convention (with png or jpg extensions matching the image type):
+        - Inline: `image-1.png`, `image-2.jpg`
+        - Featured: `featured-[slug].png`
 
         ---
 
@@ -55,7 +70,7 @@ body:
         Upload images into this issue and reference them like:
 
         ```md
-        ![Example](https://user-images.githubusercontent.com/.../image-example.png)
+        ![Example](https://user-images.githubusercontent.com/.../image-1.png)
         ```
 
         ❌ Raw HTML like `<img>` or `<div>` will be automatically rejected.

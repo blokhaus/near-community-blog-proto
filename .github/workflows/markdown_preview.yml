@@ -54,7 +54,5 @@ jobs:
               issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `📄 A preview of this blog post has been generated.
-
-👉 [Click here to view the artifact](${artifactUrl}) (look under 'Artifacts' section)`
+              body: "📄 A preview of this blog post has been generated.\n\n👉 [Click here to view the artifact](${artifactUrl}) (look under 'Artifacts' section)"
             });
