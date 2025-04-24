@@ -1,25 +1,19 @@
 ---
-name: 📝 Blog Submission
-about: Submit a new NEAR blog post
-title: ''
-labels: blog-submission
----
-
-```
-yaml
 title: "My Post Title"
 description: "A short summary"
 author: "Jane Doe"
 subject: Community
 featuredImage: https://github.com/user-attachments/assets/abc123-featured
 submission: true
-```
+---
 
-Write your blog post below this line.
+Write your blog post in this area, replacing this txt.
 
-Drag-and-drop your images right here. Then copy their links into the frontmatter or inline like:
+You can **drag and drop images right into this box**. GitHub will upload them and give you a working image URL. Up to three images are supported -- one for the featuredImage and two for use in your blog post.
 
-```markdown
-![Image Caption](https://github.com/user-attachments/assets/abc123-image-1)
-```
+Copy the image links into the frontmatter (for `featuredImage`) or into the post body, like this:
+
+![Your description of the image goes here](https://github.com/user-attachments/assets/abc123-image-1)
+
+> ⚠️ Supported image types: `.png` and `.jpg` (other types may not be validated correctly)
 
