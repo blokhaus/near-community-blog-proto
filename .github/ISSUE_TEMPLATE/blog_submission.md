@@ -1,5 +1,6 @@
 ---
-title: "My Post Title"
+title: ''
+labels: blog-submission
 description: "A short summary"
 author: "Jane Doe"
 subject: Community
