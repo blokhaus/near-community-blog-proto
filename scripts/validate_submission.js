@@ -172,18 +172,32 @@ function formToFrontmatter(issue) {
   ].join("\n");
 }
 
-/** HEAD‐check a URL and confirm its Content-Type is image/* */
-async function isImageUrl(url) {              // ← add this helper
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow"  // needed on github for CDN redirects      
+/** 
+ * HEAD‐check (with GET fallback) to confirm Content‐Type=image/* 
+ */
+async function isImageUrl(url) {
+  // 1) Point at the raw blob endpoint
+  const rawUrl = url.startsWith("https://github.com/user-attachments/assets/")
+    ? `${url}?raw=true`
+    : url;
+
+  // 2) Try HEAD first, following any redirects
+  let res = await fetch(rawUrl, {
+    method: "HEAD",
+    redirect: "follow"
+  });
+
+  // 3) If HEAD is forbidden (403), not OK, or still a redirect, fallback to GET
+  if (!res.ok || (res.status >= 300 && res.status < 400)) {
+    res = await fetch(rawUrl, {
+      method: "GET",
+      redirect: "follow"
     });
-    const ct = res.headers.get("content-type") || "";
-    return ct.startsWith("image/");
-  } catch {
-    return false;
   }
+
+  // 4) Finally, confirm it’s an image
+  const ct = res.headers.get("content-type") || "";
+  return ct.startsWith("image/");
 }
 
 if (require.main === module) {
