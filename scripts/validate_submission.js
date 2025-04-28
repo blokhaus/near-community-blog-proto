@@ -20,8 +20,6 @@ const SUBJECT_WHITELIST = [
 const MAX_IMAGE_COUNT = 2;
 const INVALID_CHARS_REGEX = /[\x00-\x1F\x7F\u200B\u202E]/g;
 const INLINE_IMAGE_REGEX = /!\[[^\]]*\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
-const FEATURED_IMAGE_REGEX = /^https:\/\/user-images\.githubusercontent\.com\/.*\/featured-[\w-]+\.(png|jpg)$/;
-const IMAGE_NAME_PATTERN = /^https:\/\/user-images\.githubusercontent\.com\/.*\/image-(\d+)\.(png|jpg)$/;
 const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
 
 function validateFrontmatter(data) {
@@ -59,15 +57,23 @@ function validateFrontmatter(data) {
   if (data.description) validateField("description", data.description);
   if (data.author) validateField("author", data.author);
 
-  if (!data.title || typeof data.title !== "string" || data.title.length > 100 || INVALID_CHARS_REGEX.test(data.title)) {
+  if (!data.title
+    || data.title.length > 100
+    || INVALID_CHARS_REGEX.test(data.title)
+  ) {
     errors.push("Invalid or missing title (max 100 chars, no control/invisible characters).");
   }
 
-  if (!data.description || typeof data.description !== "string" || data.description.length > 300 || INVALID_CHARS_REGEX.test(data.description)) {
+  if (!data.description
+    || data.description.length > 300
+    || INVALID_CHARS_REGEX.test(data.description)
+  ) {
     errors.push("Invalid or missing description (max 300 chars, no control/invisible characters).");
   }
 
-  if (!data.author || typeof data.author !== "string" || INVALID_CHARS_REGEX.test(data.author)) {
+  if (!data.author
+    || INVALID_CHARS_REGEX.test(data.author)
+  ) {
     errors.push("Missing or invalid author (no control/invisible characters).");
   }
 
@@ -75,8 +81,8 @@ function validateFrontmatter(data) {
     errors.push(`Invalid subject tag. Allowed values: ${SUBJECT_WHITELIST.join(", ")}`);
   }
 
-  if (!data.featuredImage || !FEATURED_IMAGE_REGEX.test(data.featuredImage)) {
-    errors.push("Missing or invalid featuredImage (must be GitHub-hosted and start with 'featured-').");
+  if (!data.featuredImage || !ASSET_URL_REGEX.test(data.featuredImage)) {
+    errors.push("Missing or invalid Featured Image URL (must be a GitHub Form upload URL).");
   }
 
   if (data.submission !== true) {
@@ -92,6 +98,11 @@ function validateMarkdownContent(content) {
   if (!content || typeof content !== "string") {
     errors.push("Missing Markdown body content.");
     return { valid: false, errors };
+  }
+
+  // Reject control / invisible characters in the body
+  if (INVALID_CHARS_REGEX.test(content)) {
+    errors.push("Blog content contains invalid control or invisible characters.");
   }
 
   // Initialize markdown-it with html enabled (so we can detect it)
@@ -115,35 +126,11 @@ function validateMarkdownContent(content) {
     errors.push(`Too many images used: found ${imageMatches.length}, max allowed is ${MAX_IMAGE_COUNT}.`);
   }
 
-  const usedIndices = new Set();
-
   for (const url of imageMatches) {
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.hostname !== "user-images.githubusercontent.com" || parsedUrl.search || parsedUrl.hash) {
-        errors.push(`Image URL is not clean or not from GitHub: ${url}`);
-        continue;
-      }
-
-      const match = url.match(IMAGE_NAME_PATTERN);
-      if (!match) {
-        errors.push(`Image URL does not follow required naming pattern: ${url}`);
-        continue;
-      }
-
-      const index = parseInt(match[1], 10);
-      if (index > MAX_IMAGE_COUNT || index < 1) {
-        errors.push(`Image index out of allowed range: image-${index}`);
-      } else {
-        usedIndices.add(index);
-      }
-    } catch (e) {
-      errors.push(`Invalid image URL: ${url}`);
+    if (!ASSET_URL_REGEX.test(url)) {
+      errors.push(`Invalid inline image URL: ${url}`);
+      continue;
     }
-  }
-
-  if (usedIndices.size > imageMatches.length) {
-    errors.push("Mismatch between used image references and uploaded image indices.");
   }
 
   return { valid: errors.length === 0, errors };
@@ -260,7 +247,22 @@ async function run() {
 
   const frontmatterResult = validateFrontmatter(parsed.data);
   const contentResult = validateMarkdownContent(parsed.content);
-  const allErrors = [...frontmatterResult.errors, ...contentResult.errors];
+  let allErrors = [...frontmatterResult.errors, ...contentResult.errors];
+
+  // only if no sync errors do we do the HEAD check
+  if (allErrors.length === 0) {
+    // Featured image HEAD check
+    if (!(await isImageUrl(parsed.data.featuredImage))) {
+      allErrors.push("Featured Image URL did not return image Content-Type");
+    }
+    // Inline images HEAD check
+    const inlineUrls = [...parsed.content.matchAll(INLINE_IMAGE_REGEX)].map(m => m[1]);
+    for (const url of inlineUrls) {
+      if (!(await isImageUrl(url))) {
+        allErrors.push(`Inline image URL is not an image: ${url}`);
+      }
+    }
+  }
 
   if (allErrors.length > 0) {
     const message = `❌ Submission validation failed:\n\n- ${allErrors.join("\n- ")}`;
