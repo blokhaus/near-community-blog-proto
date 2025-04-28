@@ -1,6 +1,6 @@
 name: "✍️ Submit a Blog Post"
 description: "Publish your post on the NEAR Community Blog"
-title: ""                           # Issue title field (post title)
+title: "Title of your blog post"                           # Issue title field (post title)
 labels: ["blog-submission"]
 
 body:
@@ -77,8 +77,7 @@ body:
   - type: markdown
     id: content
     attributes:
-      label: "Blog Content"
-      description: |
+      value: |
         Write your full blog post here.  
         You can **drag & drop images** directly into this field to upload them.  
         Supported types: `.png`, `.jpg`.  
