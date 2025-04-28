@@ -19,9 +19,10 @@ const SUBJECT_WHITELIST = [
 
 const MAX_IMAGE_COUNT = 2;
 const INVALID_CHARS_REGEX = /[\x00-\x1F\x7F\u200B\u202E]/g;
-const INLINE_IMAGE_REGEX = /!\[[^\]]*\]\((https:\/\/user-images\.githubusercontent\.com\/[^\s)]+)\)/g;
+const INLINE_IMAGE_REGEX = /!\[[^\]]*\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
 const FEATURED_IMAGE_REGEX = /^https:\/\/user-images\.githubusercontent\.com\/.*\/featured-[\w-]+\.(png|jpg)$/;
 const IMAGE_NAME_PATTERN = /^https:\/\/user-images\.githubusercontent\.com\/.*\/image-(\d+)\.(png|jpg)$/;
+const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
 
 function validateFrontmatter(data) {
   const errors = [];
@@ -148,6 +149,41 @@ function validateMarkdownContent(content) {
   return { valid: errors.length === 0, errors };
 }
 
+/** Convert the GitHub Form “### …” sections into a YAML front‑matter + Markdown body */
+function formToFrontmatter(issue) {
+  const section = name => {
+    const re = new RegExp(
+      `###\\s*${name}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###|$)`,
+      "i"
+    );
+    const m = issue.body.match(re);
+    return m ? m[1].trim() : "";
+  };
+
+  const esc = s => s.replace(/"/g, '\\"');
+  const title = issue.title.replace(/^\[Blog\]\s*/i, "").trim();
+  const description = section("Description");
+  const author = section("Author");
+  const subject = section("Subject");
+  const featuredImage = section("Featured Image URL");
+  const confirm = section("Confirm submission");
+  const submission = /\[x\]/i.test(confirm);
+  const content = section("Blog Content");
+
+  return [
+    "---",
+    `title: "${esc(title)}"`,
+    `description: "${esc(description)}"`,
+    `author: "${esc(author)}"`,
+    `subject: "${esc(subject)}"`,
+    `featuredImage: "${esc(featuredImage)}"`,
+    `submission: ${submission}`,
+    "---",
+    "",
+    content
+  ].join("\n");
+}
+
 if (require.main === module) {
   run().catch(err => {
     console.error("Unhandled error:", err);
@@ -195,9 +231,14 @@ async function run() {
     return await reject("You have reached the limit of 100 invalid submissions. Please review the feedback and correct your submissions.");
   }
 
+  // SMALL CHANGE: if there's no YAML front‑matter, wrap Form sections
+  const raw = issueBody.trim().startsWith("---")
+    ? issueBody
+    : formToFrontmatter(issue);
+
   let parsed;
   try {
-    parsed = matter(issueBody);
+    parsed = matter(raw);
   } catch (e) {
     await octokit.issues.createComment({
       owner,

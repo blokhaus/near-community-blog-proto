@@ -13,15 +13,17 @@ body:
       placeholder: "A quick overview of your post"
     validations:
       required: true
+      max_length: 300
 
   - type: input
     id: author
     attributes:
       label: "Author"
-      description: "Your name or handle"
+      description: "Your name or handle (max 100 characters)"
       placeholder: "Jane Doe"
     validations:
       required: true
+      max_length: 100
 
   - type: dropdown
     id: subject
@@ -48,6 +50,8 @@ body:
       placeholder: "https://github.com/user-attachments/assets/…"
     validations:
       required: true
+      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
+      pattern-error: "Must be a GitHub‑Form upload URL (…/assets/<uuid>)."
 
   # — Optional inline images —
   - type: input
@@ -56,6 +60,9 @@ body:
       label: "Optional Inline Image 1 URL"
       description: "Drag an image into the editor below, then paste its URL here"
       placeholder: "https://github.com/user-attachments/assets/…"
+    validations:
+      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
+      pattern-error: "Must be a GitHub‑Form upload URL."
 
   - type: input
     id: image2
@@ -63,6 +70,9 @@ body:
       label: "Optional Inline Image 2 URL"
       description: "Drag an image into the editor below, then paste its URL here"
       placeholder: "https://github.com/user-attachments/assets/…"
+    validations:
+      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
+      pattern-error: "Must be a GitHub‑Form upload URL."
 
   # — Confirmation checkbox —
   - type: checkboxes
