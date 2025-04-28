@@ -324,6 +324,14 @@ async function run() {
     owner, repo, issue_number: issueNumber,
     labels: ["valid-submission"]
   });
+
+  // lock issue to prevent further edits after validation
+  await octokit.issues.lock({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    lock_reason: "resolved"
+  });
 }
 
 async function reject(reason) {
