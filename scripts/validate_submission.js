@@ -3,7 +3,6 @@
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
-const fetch = require("node-fetch");
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 const SUBJECT_WHITELIST = [
