@@ -3,6 +3,7 @@
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
+const fetch = require("node-fetch");         // ← add this import
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
@@ -171,6 +172,17 @@ function formToFrontmatter(issue) {
   ].join("\n");
 }
 
+/** HEAD‐check a URL and confirm its Content-Type is image/* */
+async function isImageUrl(url) {              // ← add this helper
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    const ct = res.headers.get("content-type") || "";
+    return ct.startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
 if (require.main === module) {
   run().catch(err => {
     console.error("Unhandled error:", err);
@@ -265,12 +277,19 @@ async function run() {
   }
 
   if (allErrors.length > 0) {
-    const message = `❌ Submission validation failed:\n\n- ${allErrors.join("\n- ")}`;
-    await octokit.issues.createComment({ owner, repo, issue_number: issueNumber, body: message });
-    await octokit.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ["invalid"] });
+    // ❌ on any error, comment + label invalid
+    await octokit.issues.createComment({
+      owner, repo, issue_number: issueNumber,
+      body: `❌ Submission validation failed:\n\n- ${allErrors.join("\n- ")}`
+    });
+    await octokit.issues.addLabels({
+      owner, repo, issue_number: issueNumber,
+      labels: ["invalid"]
+    });
     return;
   }
 
+  // —— RESTORE this block so fixing an invalid submission clears the label ——  
   if (labels.includes("invalid")) {
     await octokit.issues.removeLabel({
       owner,
@@ -280,17 +299,13 @@ async function run() {
     });
   }
 
+  // ✅ now comment & label valid
   await octokit.issues.createComment({
-    owner,
-    repo,
-    issue_number: issueNumber,
+    owner, repo, issue_number: issueNumber,
     body: `✅ Your submission has passed initial validation and is under review.`
   });
-
   await octokit.issues.addLabels({
-    owner,
-    repo,
-    issue_number: issueNumber,
+    owner, repo, issue_number: issueNumber,
     labels: ["valid-submission"]
   });
 }
