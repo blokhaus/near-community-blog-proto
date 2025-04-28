@@ -5,3 +5,8 @@ contact_links:
     url: https://github.com/blokhaus/near-community-blog-proto/discussions
     about: Use Discussions for non-urgent questions, brainstorming, or general ideas
 
+issue_templates:
+  - name: "✍️ Submit a Blog Post"
+    description: "Publish your post on the NEAR Community Blog"
+    file: blog_submission.md
+
