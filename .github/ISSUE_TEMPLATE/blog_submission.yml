@@ -1,0 +1,99 @@
+name: "✍️ Submit a Blog Post"
+description: "Publish your post on the NEAR Community Blog"
+title: ""                           # Issue title field (post title)
+labels: ["blog-submission"]
+
+body:
+  # — Required metadata —
+  - type: input
+    id: description
+    attributes:
+      label: "Description"
+      description: "Short summary (max 300 chars)"
+      placeholder: "A quick overview of your post"
+    validations:
+      required: true
+
+  - type: input
+    id: author
+    attributes:
+      label: "Author"
+      description: "Your name or handle"
+      placeholder: "Jane Doe"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subject
+    attributes:
+      label: "Subject"
+      description: "Choose a category"
+      options:
+        - Community
+        - Developers
+        - Ecosystem
+        - DAOs
+        - NFTs
+        - Gaming
+        - Web3 Gaming
+        - User-Owned AI
+    validations:
+      required: true
+
+  - type: input
+    id: featuredImage
+    attributes:
+      label: "Featured Image URL"
+      description: "Drag an image into the Markdown editor below, then paste its URL here"
+      placeholder: "https://github.com/user-attachments/assets/…"
+    validations:
+      required: true
+
+  # — Optional inline images —
+  - type: input
+    id: image1
+    attributes:
+      label: "Optional Inline Image 1 URL"
+      description: "Drag an image into the editor below, then paste its URL here"
+      placeholder: "https://github.com/user-attachments/assets/…"
+  - type: input
+    id: image2
+    attributes:
+      label: "Optional Inline Image 2 URL"
+      description: "Drag an image into the editor below, then paste its URL here"
+      placeholder: "https://github.com/user-attachments/assets/…"
+
+  # — Confirmation checkbox —
+  - type: checkboxes
+    id: submission
+    attributes:
+      label: "Confirm submission"
+      description: "Check to confirm you’re ready to submit"
+      options:
+        - label: I confirm this submission is final
+          required: true
+
+  # — Full Markdown editor for the post body —
+  - type: markdown
+    id: content
+    attributes:
+      label: "Blog Content"
+      description: |
+        Write your full blog post here.  
+        You can **drag & drop images** directly into this field to upload them.  
+        Supported types: `.png`, `.jpg`.  
+        **Example usage** of your three images:
+
+        ```markdown
+        ![Featured Image](${ { inputs.featuredImage } })
+        
+        In the text you might write:
+
+        Lorem ipsum dolor sit amet...
+
+        ![Alt text for image 1](${ { inputs.image1 } })
+
+        More content…
+
+        ![Alt text for image 2](${ { inputs.image2 } })
+        ```
