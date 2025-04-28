@@ -6,17 +6,9 @@ function slugifyTitle(title) {
   return slugify(title || '', { lower: true, strict: true }) || `submission-${Date.now()}`;
 }
 
-function isGitHubImageUrl(urlString) {
-  try {
-    const url = new URL(urlString);
-    return (
-      url.hostname === 'user-images.githubusercontent.com' &&
-      !url.search &&
-      !url.hash
-    );
-  } catch (e) {
-    return false;
-  }
+const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
+function isGitHubImageUrl(url) {
+  return ASSET_URL_REGEX.test(url);
 }
 
 function extractImageIndex(urlString) {

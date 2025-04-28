@@ -175,7 +175,10 @@ function formToFrontmatter(issue) {
 /** HEAD‐check a URL and confirm its Content-Type is image/* */
 async function isImageUrl(url) {              // ← add this helper
   try {
-    const res = await fetch(url, { method: "HEAD" });
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow"  // needed on github for CDN redirects      
+    });
     const ct = res.headers.get("content-type") || "";
     return ct.startsWith("image/");
   } catch {

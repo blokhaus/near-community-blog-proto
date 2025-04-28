@@ -37,7 +37,9 @@ async function run() {
 
   fs.mkdirSync(imageDir, { recursive: true });
 
-  const imageRegex = /!\[(.*?)\]\((https:\/\/user-images\.githubusercontent\.com\/[^)]+)\)/g;
+  // match inline images uploaded via the new Form host
+  const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
+
   const images = [...content.matchAll(imageRegex)];
 
   let updatedContent = content;
@@ -62,18 +64,14 @@ async function run() {
         throw new Error(`Invalid MIME type for image: ${type?.mime}`);
       }
 
-      const image = sharp(buffer);
-      const metadata = await image.metadata();
-      const ratio = metadata.width / metadata.height;
-      if (Math.abs(ratio - 16 / 9) > 0.05) {
-        throw new Error(`Image must be 16:9 ratio. Found: ${metadata.width}x${metadata.height}`);
-      }
+      // attach the correct extension
+      const base = path.basename(new URL(url).pathname);
+      const filename = `${base}.${type.ext}`;
 
-      const filename = path.basename(new URL(url).pathname);
       const localPath = `./images/${filename}`;
       const fullLocalPath = path.join(imageDir, filename);
 
-      const cleaned = await image.toFormat(type.ext).toBuffer();
+      const cleaned = await sharp(buffer).toFormat(type.ext).toBuffer();
       fs.writeFileSync(fullLocalPath, cleaned);
 
       updatedContent = updatedContent.replace(url, localPath);
@@ -94,7 +92,11 @@ async function run() {
     description: data.description,
     author: data.author,
     subject: data.subject,
-    featuredImage: `./images/${path.basename(data.featuredImage)}`,
+    // note: strip any query params, then add the same extension
+    featuredImage: `./images/${path.basename(data.featuredImage)}.${FileType.fromBuffer
+      ? (await FileType.fromBuffer(await fetch(data.featuredImage).then(r => r.buffer()))).ext
+      : path.extname(data.featuredImage).slice(1)
+      }`,
     publishDate: date,
   };
 
