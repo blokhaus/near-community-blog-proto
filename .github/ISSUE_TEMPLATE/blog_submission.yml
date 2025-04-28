@@ -95,6 +95,5 @@ body:
         More content...
 
         ![Alt text for image 2](https://github.com/user-attachments/assets/...)
-      render: markdown
     validations:
       required: true
