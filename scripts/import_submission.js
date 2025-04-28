@@ -4,7 +4,8 @@ const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const fs = require("fs");
 const path = require("path");
-const fetch = require("node-fetch");
+// use Node’s built‑in fetch (Node 18+)
+// no import needed
 const FileType = require("file-type");
 const sharp = require("sharp");
 const {
