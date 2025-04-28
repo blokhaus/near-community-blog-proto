@@ -18,7 +18,7 @@ const SUBJECT_WHITELIST = [
 ];
 
 const MAX_IMAGE_COUNT = 2;
-const INVALID_CHARS_REGEX = /[\x00-\x1F\x7F\u200B\u202E]/g;
+const INVALID_CHARS_REGEX = /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F\u200B\u202E]/g;
 const INLINE_IMAGE_REGEX = /!\[[^\]]*\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
 const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
 
