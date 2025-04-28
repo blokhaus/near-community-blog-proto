@@ -6,7 +6,8 @@ function slugifyTitle(title) {
   return slugify(title || '', { lower: true, strict: true }) || `submission-${Date.now()}`;
 }
 
-const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
+// allow ?raw=true
+const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+(?:\?raw=true)?$/;
 function isGitHubImageUrl(url) {
   return ASSET_URL_REGEX.test(url);
 }

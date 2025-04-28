@@ -48,7 +48,7 @@ async function run() {
     fs.mkdirSync(imageDir, { recursive: true });
 
     // match inline images uploaded via the new Form host
-    const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
+    const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+)(?:\?raw=true)?\)/g;
 
     const images = [...content.matchAll(imageRegex)];
 

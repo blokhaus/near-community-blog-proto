@@ -3,8 +3,7 @@
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
-const fetch = require("node-fetch");         // ← add this import
-
+const fetch = require("node-fetch");
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 const SUBJECT_WHITELIST = [
@@ -21,7 +20,8 @@ const SUBJECT_WHITELIST = [
 const MAX_IMAGE_COUNT = 2;
 const INVALID_CHARS_REGEX = /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F\u200B\u202E]/g;
 const INLINE_IMAGE_REGEX = /!\[[^\]]*\]\((https:\/\/github\.com\/user-attachments\/assets\/[^\s)]+)\)/g;
-const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+$/;
+// allow optional ?raw=true at end
+const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+(?:\?raw=true)?$/;
 
 function validateFrontmatter(data) {
   const errors = [];
