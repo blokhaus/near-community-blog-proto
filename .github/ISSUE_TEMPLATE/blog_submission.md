@@ -1,12 +1,12 @@
 # 📋 Post Metadata (required — fill in each line)
 
-**Description:**  
-**Author:**  
-**Subject:** Community, Developers, Ecosystem, DAOs, NFTs, Gaming, Web3 Gaming, User-Owned AI  
-**Featured Image URL:**  
-**Optional Image 1 URL:**  
-**Optional Image 2 URL:**  
-**Submission:** true  
+Description:  
+Author: 
+Subject: Community, Developers, Ecosystem, DAOs, NFTs, Gaming, Web3 Gaming, User-Owned AI  
+Featured Image URL:  
+Optional Image 1 URL:  
+Optional Image 2 URL:  
+Submission: true  
 
 ---
 
