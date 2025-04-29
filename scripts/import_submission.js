@@ -8,6 +8,7 @@ const path = require("path");
 // no import needed
 const FileType = require("file-type");
 const sharp = require("sharp");
+const { execSync } = require("child_process");
 const {
   slugifyTitle,
   isGitHubImageUrl,
@@ -54,6 +55,7 @@ async function run() {
 
     const slug = slugifyTitle(data.title);
     const date = new Date().toISOString().split("T")[0];
+    const branch = `submissions/issue-${issueNumber}-${slug}`.substring(0, 60);
     const postDir = path.join("content", "posts", `${date}-${slug}`);
     const imageDir = path.join(postDir, "images");
 
@@ -70,11 +72,12 @@ async function run() {
         throw new Error(`Invalid inline image URL: ${url}`);
       }
 
-      const rawUrl = toRawUrl(url);
-      const res = await fetch(rawUrl, { redirect: "follow" });
-      if (!res.ok) throw new Error(`Failed to fetch image: ${rawUrl}`);
+      const res = await fetch(toRawUrl(url), { redirect: "follow" });
+      if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
 
-      const buffer = await res.buffer();
+      const arrayBuf = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+
       const type = await FileType.fromBuffer(buffer);
       if (!type || !["image/png", "image/jpeg"].includes(type.mime)) {
         throw new Error(`Invalid MIME type for image: ${type?.mime}`);
@@ -92,10 +95,12 @@ async function run() {
     }
 
     // Fetch & write the featured image the same way
-    const rawFeat = toRawUrl(data.featuredImage);
-    const featRes = await fetch(rawFeat, { redirect: "follow" });
-    if (!featRes.ok) throw new Error(`Failed to fetch featured image: ${rawFeat}`);
-    const featBuf = await featRes.buffer();
+    const featRes = await fetch(toRawUrl(data.featuredImage), { redirect: "follow" });
+    if (!featRes.ok) throw new Error(`Failed to fetch featured image: ${data.featuredImage}`);
+
+    const featArrayBuf = await featRes.arrayBuffer();
+    const featBuf = Buffer.from(featArrayBuf);
+
     const featType = await FileType.fromBuffer(featBuf);
     if (!featType || !["image/png", "image/jpeg"].includes(featType.mime)) {
       throw new Error(`Invalid MIME type for featured image: ${featType?.mime}`);
@@ -121,11 +126,19 @@ async function run() {
     const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
     fs.writeFileSync(path.join(postDir, "index.md"), finalMarkdown);
 
+    // commit & push out your branch
+    execSync(`git config user.name "github-actions[bot]"`);
+    execSync(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
+    execSync(`git checkout -b ${branch}`);
+    execSync(`git add content/posts/${date}-${slug}`);
+    execSync(`git commit -m "Import blog submission #${issueNumber}: ${data.title}"`);
+    execSync(`git push --set-upstream origin ${branch}`);
+
     pr = await octokit.pulls.create({
       owner,
       repo,
       title: `Blog Submission from @${username} — “${data.title}”`,
-      head: `submissions/issue-${issueNumber}-${slug}`.substring(0, 60),
+      head: branch,
       base: "main",
       body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
     });
