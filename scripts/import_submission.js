@@ -54,11 +54,15 @@ async function run() {
     }
 
     const slug = slugifyTitle(data.title);
-    const date = new Date().toISOString().split("T")[0];
-    const branch = `submissions/issue-${issueNumber}-${slug}`.substring(0, 60);
-    const postDir = path.join("content", "posts", `${date}-${slug}`);
-    const imageDir = path.join(postDir, "images");
 
+    // generate safe date + timestamp once
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];               // "YYYY‑MM‑DD"
+    const timestamp = now.toISOString().replace(/[:.]/g, '-');      // "YYYY‑MM‑DDThh-mm-ss-sssZ"
+    const folderName = `${date}-${timestamp}-${slug}`;
+    const branch = `submissions/issue-${issueNumber}-${timestamp}-${slug}`.substring(0, 60);
+    const postDir = path.join('content', 'posts', folderName);
+    const imageDir = path.join(postDir, 'images');
     fs.mkdirSync(imageDir, { recursive: true });
 
     // match inline images uploaded via the new Form host
@@ -119,7 +123,7 @@ async function run() {
       author: data.author,
       subject: data.subject,
       featuredImage: featLocalPath,
-      publishDate: date,
+      publishDate: now.toISOString(),   // full timestamp
     };
 
     // Write out the assembled post
@@ -129,10 +133,10 @@ async function run() {
     // commit & push out your branch
     execSync(`git config user.name "github-actions[bot]"`);
     execSync(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-    execSync(`git checkout -b ${branch}`);
-    execSync(`git add content/posts/${date}-${slug}`);
+    execSync(`git checkout -B ${branch}`);                           // reset or create
+    execSync(`git add content/posts/${folderName}`);
     execSync(`git commit -m "Import blog submission #${issueNumber}: ${data.title}"`);
-    execSync(`git push --set-upstream origin ${branch}`);
+    execSync(`git push --force-with-lease --set-upstream origin ${branch}`);
 
     // fetch the real default branch name (e.g. “dev”)
     const { data: repoData } = await octokit.repos.get({ owner, repo });
