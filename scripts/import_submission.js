@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 // use Node’s built‑in fetch (Node 18+)
 // no import needed
-const FileType = require("file-type");
+const { fileTypeFromBuffer } = require("file-type");
 const sharp = require("sharp");
 const { execSync } = require("child_process");
 const {
@@ -78,7 +78,7 @@ async function run() {
       const arrayBuf = await res.arrayBuffer();
       const buffer = Buffer.from(arrayBuf);
 
-      const type = await FileType.fromBuffer(buffer);
+      const type = await fileTypeFromBuffer(buffer);
       if (!type || !["image/png", "image/jpeg"].includes(type.mime)) {
         throw new Error(`Invalid MIME type for image: ${type?.mime}`);
       }
@@ -101,7 +101,7 @@ async function run() {
     const featArrayBuf = await featRes.arrayBuffer();
     const featBuf = Buffer.from(featArrayBuf);
 
-    const featType = await FileType.fromBuffer(featBuf);
+    const featType = await fileTypeFromBuffer(featBuf);
     if (!featType || !["image/png", "image/jpeg"].includes(featType.mime)) {
       throw new Error(`Invalid MIME type for featured image: ${featType?.mime}`);
     }
