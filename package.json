@@ -14,6 +14,8 @@
     "@octokit/rest": "^21.1.1",
     "file-type": "^20.5.0",
     "gray-matter": "^4.0.3",
-    "markdown-it": "^14.1.0"
+    "markdown-it": "^14.1.0",
+    "sharp": "^0.34.1",
+    "slugify": "^1.6.6"
   }
 }
