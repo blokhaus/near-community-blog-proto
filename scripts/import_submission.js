@@ -11,7 +11,8 @@ const sharp = require("sharp");
 const {
   slugifyTitle,
   isGitHubImageUrl,
-  extractImageIndex
+  extractImageIndex,
+  formToFrontmatter
 } = require("./import_helpers");
 
 /**
@@ -28,12 +29,22 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const issueNumber = process.env.ISSUE_NUMBER;
-  const body = process.env.ISSUE_BODY;
   const username = process.env.ISSUE_USER;
   let pr;
 
+  // Fetch the full issue so we have title + body
+  const { data: issue } = await octokit.issues.get({
+    owner,
+    repo,
+    issue_number: issueNumber
+  });
+  // If they already pasted real frontmatter, use it; otherwise convert the Form sections
+  const raw = issue.body.trim().startsWith("---")
+    ? issue.body
+    : formToFrontmatter(issue);
+
   try {
-    const parsed = matter(body);
+    const parsed = matter(raw);
     const { data, content } = parsed;
 
     if (!data.submission) {
@@ -50,12 +61,15 @@ async function run() {
 
     // match inline images uploaded via the new Form host
     const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+)(?:\?raw=true)?\)/g;
-
     const images = [...content.matchAll(imageRegex)];
-
     let updatedContent = content;
 
     for (const [, alt, url] of images) {
+      // ensure it’s a Form‐hosted asset URL
+      if (!isGitHubImageUrl(url)) {
+        throw new Error(`Invalid inline image URL: ${url}`);
+      }
+
       const rawUrl = toRawUrl(url);
       const res = await fetch(rawUrl, { redirect: "follow" });
       if (!res.ok) throw new Error(`Failed to fetch image: ${rawUrl}`);
@@ -68,7 +82,6 @@ async function run() {
 
       const base = path.basename(new URL(url).pathname);
       const filename = `${base}.${type.ext}`;
-
       const localPath = `./images/${filename}`;
       const fullLocalPath = path.join(imageDir, filename);
 
@@ -78,6 +91,7 @@ async function run() {
       updatedContent = updatedContent.replace(url, localPath);
     }
 
+    // Fetch & write the featured image the same way
     const rawFeat = toRawUrl(data.featuredImage);
     const featRes = await fetch(rawFeat, { redirect: "follow" });
     if (!featRes.ok) throw new Error(`Failed to fetch featured image: ${rawFeat}`);
@@ -87,15 +101,23 @@ async function run() {
       throw new Error(`Invalid MIME type for featured image: ${featType?.mime}`);
     }
 
+    const featBase = path.basename(new URL(data.featuredImage).pathname);
+    const featFilename = `${featBase}.${featType.ext}`;
+    const featLocalPath = `./images/${featFilename}`;
+    const featFullPath = path.join(imageDir, featFilename);
+    const featCleaned = await sharp(featBuf).toFormat(featType.ext).toBuffer();
+    fs.writeFileSync(featFullPath, featCleaned);
+
     const finalFrontmatter = {
       title: data.title,
       description: data.description,
       author: data.author,
       subject: data.subject,
-      featuredImage: `./images/${path.basename(new URL(data.featuredImage).pathname)}.${featType.ext}`,
+      featuredImage: featLocalPath,
       publishDate: date,
     };
 
+    // Write out the assembled post
     const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
     fs.writeFileSync(path.join(postDir, "index.md"), finalMarkdown);
 

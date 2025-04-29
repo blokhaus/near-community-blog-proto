@@ -21,8 +21,45 @@ function extractImageIndex(urlString) {
   }
 }
 
+/**
+ * Convert the GitHub Form “### …” sections into a YAML front‑matter + Markdown body
+ */
+function formToFrontmatter(issue) {
+  const section = name => {
+    const re = new RegExp(
+      `###\\s*${name}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###|$)`,
+      "i"
+    );
+    const m = issue.body.match(re);
+    return m ? m[1].trim() : "";
+  };
+  const esc = s => s.replace(/"/g, '\\"');
+  const title = issue.title.replace(/^\[Blog\]\s*/i, "").trim();
+  const description = section("Description");
+  const author = section("Author");
+  const subject = section("Subject");
+  const featuredImage = section("Featured Image URL");
+  const confirm = section("Confirm submission");
+  const submission = /\[x\]/i.test(confirm);
+  const content = section("Blog Content");
+
+  return [
+    "---",
+    `title: "${esc(title)}"`,
+    `description: "${esc(description)}"`,
+    `author: "${esc(author)}"`,
+    `subject: "${esc(subject)}"`,
+    `featuredImage: "${esc(featuredImage)}"`,
+    `submission: ${submission}`,
+    "---",
+    "",
+    content
+  ].join("\n");
+}
+
 module.exports = {
   slugifyTitle,
   isGitHubImageUrl,
-  extractImageIndex
+  extractImageIndex,
+  formToFrontmatter
 };
