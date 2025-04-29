@@ -134,12 +134,16 @@ async function run() {
     execSync(`git commit -m "Import blog submission #${issueNumber}: ${data.title}"`);
     execSync(`git push --set-upstream origin ${branch}`);
 
+    // fetch the real default branch name (e.g. “dev”)
+    const { data: repoData } = await octokit.repos.get({ owner, repo });
+    const baseBranch = repoData.default_branch;
+
     pr = await octokit.pulls.create({
       owner,
       repo,
       title: `Blog Submission from @${username} — “${data.title}”`,
       head: branch,
-      base: "main",
+      base: baseBranch,    // ← use dynamic default branch
       body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
     });
 
