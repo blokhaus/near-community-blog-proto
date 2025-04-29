@@ -255,22 +255,16 @@ async function run() {
   try {
     parsed = matter(raw);
   } catch (e) {
+    // on parse‐error, label + comment & exit non‑zero
     await octokit.issues.createComment({
-      owner,
-      repo,
-      issue_number: issueNumber,
+      owner, repo, issue_number: issueNumber,
       body: `❌ Unable to parse your submission. Please ensure it includes valid frontmatter and Markdown.`
     });
-
     await octokit.issues.addLabels({
-      owner,
-      repo,
-      issue_number: issueNumber,
+      owner, repo, issue_number: issueNumber,
       labels: ["invalid"]
     });
-
-    console.error("Error parsing submission:", e);
-    return;
+    return await reject("Unable to parse submission");
   }
 
   const frontmatterResult = validateFrontmatter(parsed.data);
@@ -293,7 +287,7 @@ async function run() {
   }
 
   if (allErrors.length > 0) {
-    // ❌ on any error, comment + label invalid
+    // ❌ comment + label invalid, then abort with an exception
     await octokit.issues.createComment({
       owner, repo, issue_number: issueNumber,
       body: `❌ Submission validation failed:\n\n- ${allErrors.join("\n- ")}`
@@ -302,7 +296,7 @@ async function run() {
       owner, repo, issue_number: issueNumber,
       labels: ["invalid"]
     });
-    return;
+    throw new Error("Submission validation failed");
   }
 
   // —— RESTORE this block so fixing an invalid submission clears the label ——  
