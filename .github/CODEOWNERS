@@ -1,5 +1,5 @@
-# Protect critical paths — only @jameswjr can approve changes for now
+# Protect critical paths — only @jameswjr and @brennancaldwell can approve changes for now
 
-/scripts/                 @jameswjr
-/.github/workflows/       @jameswjr
-/content/posts/           @jameswjr
+/scripts/                 @jameswjr @brennancaldwell
+/.github/workflows/       @jameswjr @brennancaldwell
+/content/posts/           @jameswjr @brennancaldwell
