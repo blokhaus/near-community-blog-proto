@@ -134,6 +134,11 @@ function validateMarkdownContent(content) {
     }
   }
 
+  const totalImages = imageMatches.length + 1; // +1 for featured
+  if (totalImages > 3) {
+    errors.push(`Too many images total: found ${totalImages}, max 3 allowed.`);
+  }
+
   return { valid: errors.length === 0, errors };
 }
 
