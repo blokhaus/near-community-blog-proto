@@ -12,6 +12,7 @@
   "author": "Blokhaus Team",
   "dependencies": {
     "@octokit/rest": "^21.1.1",
+    "file-type": "^20.5.0",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0"
   }
