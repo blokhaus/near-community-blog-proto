@@ -27,30 +27,37 @@ jobs:
 
       - name: Regenerate posts.json
         run: |
-          node -e "
-            const fs = require('fs'),
-                  path = require('path'),
-                  matter = require('gray-matter');
-            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
-            const ref           = process.env.GITHUB_REF_NAME; // branch name
-            const postsDir      = path.join(process.cwd(),'content','posts');
-            const folders = fs.readdirSync(postsDir)
-              .filter(d => fs.statSync(path.join(postsDir,d)).isDirectory())
-              .sort((a, b) => b.localeCompare(a)); // newest‑first by ISO name
-            const arr = folders.map(folder => {
-              const md   = fs.readFileSync(path.join(postsDir,folder,'index.md'),'utf8');
-              const { data } = matter(md);
-              const rawBase   = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/content/posts/${folder}`;
-              return {
-                title: data.title,
-                featuredImage: `${rawBase}/${data.featuredImage.replace(/^\.\//,'')}`,
-                slug: folder.split('-').slice(2).join('-'),
-                subject: data.subject,
-                githubPath: rawBase
-              };
-            });
-            fs.writeFileSync('content/posts.json', JSON.stringify(arr, null, 2)+'\n');
-          "
+          node << 'EOF'
+          const fs     = require('fs');
+          const path   = require('path');
+          const matter = require('gray-matter');
+
+          const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+          const ref           = process.env.GITHUB_REF_NAME;
+          const postsDir      = path.join(process.cwd(), 'content', 'posts');
+
+          // read & sort folders newest‑first (ISO date‑prefix)
+          const folders = fs
+            .readdirSync(postsDir)
+            .filter(d => fs.statSync(path.join(postsDir, d)).isDirectory())
+            .sort((a, b) => b.localeCompare(a));
+
+          const arr = folders.map(folder => {
+            const file = path.join(postsDir, folder, 'index.md');
+            const md   = fs.readFileSync(file, 'utf8');
+            const { data } = matter(md);
+            const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/content/posts/${folder}`;
+            return {
+              title: data.title,
+              featuredImage: `${rawBase}/${data.featuredImage.replace(/^\.\//, '')}`,
+              slug: folder.split('-').slice(2).join('-'),
+              subject: data.subject,
+              githubPath: rawBase
+            };
+          });
+
+          fs.writeFileSync('content/posts.json', JSON.stringify(arr, null, 2) + '\n');
+          EOF
 
       - name: Commit & Push Index
         run: |
