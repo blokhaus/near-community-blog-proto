@@ -136,7 +136,9 @@ async function run() {
     execSync(`git checkout -B ${branch}`);                           // reset or create
     execSync(`git add content/posts/${folderName}`);
     execSync(`git commit -m "Import blog submission #${issueNumber}: ${data.title}"`);
-    execSync(`git push --force-with-lease --set-upstream origin ${branch}`);
+
+    // force‑overwrite the remote branch (ignore any fast‑forward checks)
+    execSync(`git push --force --set-upstream origin ${branch}`);
 
     // fetch the real default branch name (e.g. “dev”)
     const { data: repoData } = await octokit.repos.get({ owner, repo });
