@@ -153,6 +153,16 @@ async function run() {
       body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
     });
 
+    // ensure the issue is unlocked so we can comment
+    try {
+      await octokit.issues.unlock({
+        owner,
+        repo,
+        issue_number: issueNumber,
+      });
+    } catch (e) { /* ignore if already unlocked */ }
+
+    // success comment
     await octokit.issues.createComment({
       owner,
       repo,
@@ -174,6 +184,7 @@ async function run() {
       state: "closed"
     });
 
+    // re‑lock now that all comments & labels are done
     await octokit.issues.lock({
       owner,
       repo,
@@ -186,23 +197,38 @@ async function run() {
   } catch (err) {
     console.error("❌ Import failed:", err);
 
-    // ← NEW: comment back on the Issue
+    // make sure the issue is unlocked so we can comment
+    try {
+      await octokit.issues.unlock({
+        owner,
+        repo,
+        issue_number: issueNumber,
+      });
+    } catch (unlockErr) { /* ignore if it wasn’t locked */ }
+
+    // report the failure
     await octokit.issues.createComment({
       owner,
       repo,
       issue_number: issueNumber,
-      body: `❌ Import failed: ${err.message}`
+      body: `❌ Import failed: ${err.message}`,
     });
 
-    // ← NEW: add an “import-failed” label (create this label in your repo)
     await octokit.issues.addLabels({
       owner,
       repo,
       issue_number: issueNumber,
-      labels: ["import-failed"]
+      labels: ["import-failed"],
     });
 
-    // re‑throw so the Action still fails
+    // re‑lock now that our reporting is done
+    await octokit.issues.lock({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      lock_reason: "resolved",
+    });
+
     throw err;
   }
 }
