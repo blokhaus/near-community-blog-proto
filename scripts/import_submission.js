@@ -37,11 +37,11 @@ function toRawUrl(url) {
 }
 
 /**
- * Fetch with a 5 s timeout
+ * Fetch with a 30 s timeout (was 5 s)
  */
 async function fetchWithTimeout(input, init = {}) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 5000);
+  const id = setTimeout(() => controller.abort(), 30000);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {
@@ -296,93 +296,63 @@ async function run() {
       force: true
     });
 
-    // 4) open the PR on that branch
+    // — only after a successful commit do we open the PR —
     pr = await octokit.pulls.create({
-      owner,
-      repo,
+      owner, repo,
       title: `Blog Submission from @${username} — "${data.title}"`,
       head: branch,
       base,
-      body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
+      body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review.`
     });
 
-    // ensure the issue is unlocked so we can comment
+    // unlock, comment, add “imported” label
+    await octokit.issues.unlock({ owner, repo, issue_number: issueNumber });
+    await octokit.issues.createComment({
+      owner, repo, issue_number: issueNumber,
+      body: `✅ Submission has been converted into [PR #${pr.data.number}](${pr.data.html_url}).`
+    });
+    await octokit.issues.addLabels({
+      owner, repo, issue_number: issueNumber,
+      labels: ["imported"],
+    });
+
+    // clear any old “import-failed” label
     try {
-      await octokit.issues.unlock({
+      await octokit.issues.removeLabel({
         owner,
         repo,
         issue_number: issueNumber,
+        name: "import-failed"
       });
-    } catch (e) { /* ignore if already unlocked */ }
+    } catch (e) { /* ignore if it wasn’t there */ }
 
-    // success comment
+    // close & re‑lock
+    await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: "closed" });
+    await octokit.issues.lock({ owner, repo, issue_number: issueNumber, lock_reason: "resolved" });
+
+    console.log(`✅ Imported submission to ${repoPostDir}`);
+  } catch (err) {
+    // ANY error (fetch timeout, blob/tree/commit, etc.) will land here
+    console.error("❌ Import failed:", err);
+
+    // make sure the issue is unlocked
+    try { await octokit.issues.unlock({ owner, repo, issue_number: issueNumber }); } catch { }
+
+    // report failure & label
     await octokit.issues.createComment({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      body: `✅ Submission has been converted into [PR #${pr.data.number}](${pr.data.html_url}).\n\nThis issue is now closed and locked. Please follow further discussion in the PR.`
+      owner, repo, issue_number: issueNumber,
+      body: `❌ Import failed: ${err.message}`
     });
-
     await octokit.issues.addLabels({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      labels: ["imported"]
+      owner, repo, issue_number: issueNumber,
+      labels: ["import-failed"]
     });
-
-    await octokit.issues.update({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      state: "closed"
-    });
-
-    // re‑lock now that all comments & labels are done
     await octokit.issues.lock({
-      owner,
-      repo,
-      issue_number: issueNumber,
+      owner, repo, issue_number: issueNumber,
       lock_reason: "resolved"
     });
 
-    console.log(`✅ Imported submission to ${repoPostDir}`);
-
-  } catch (err) {
-    console.error("❌ Import failed:", err);
-
-    // make sure the issue is unlocked so we can comment
-    try {
-      await octokit.issues.unlock({
-        owner,
-        repo,
-        issue_number: issueNumber,
-      });
-    } catch (unlockErr) { /* ignore if it wasn’t locked */ }
-
-    // report the failure
-    await octokit.issues.createComment({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      body: `❌ Import failed: ${err.message}`,
-    });
-
-    await octokit.issues.addLabels({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      labels: ["import-failed"],
-    });
-
-    // re‑lock now that our reporting is done
-    await octokit.issues.lock({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      lock_reason: "resolved",
-    });
-
-    throw err;
+    return; // ensure we never proceed to PR creation
   }
 }
 
