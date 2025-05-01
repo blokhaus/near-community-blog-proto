@@ -144,8 +144,9 @@ async function run() {
       inlineAssets.push({ filename, buffer: cleaned });
       // point content at the new relative path, stripping any '?raw=true'
       const rawQueryUrl = `${url}?raw=true`;
-      updatedContent = updatedContent.split(rawQueryUrl).join(`./images/${filename}`);
-      updatedContent = updatedContent.split(url).join(`./images/${filename}`);
+      // reference images relative to index.md
+      updatedContent = updatedContent.split(rawQueryUrl).join(`images/${filename}`);
+      updatedContent = updatedContent.split(url).join(`images/${filename}`);
     }
 
     // Fetch & write the featured image the same way
@@ -181,7 +182,8 @@ async function run() {
       description: data.description,
       author: data.author,
       subject: data.subject,
-      featuredImage: `./images/${featFilename}`,
+      // path is relative to index.md, so no leading `./`
+      featuredImage: `images/${featFilename}`,
       publishDate: now.toISOString(),   // full timestamp
     };
 
@@ -195,42 +197,89 @@ async function run() {
     const { data: baseBranch } = await octokit.repos.getBranch({ owner, repo, branch: base });
     const baseSha = baseBranch.commit.sha;
 
-    // 2) create or reset our branch
+    //
+    // 2–3) CREATE + COMMIT ALL FILES VIA GIT DATA API ON OUR FEATURE BRANCH
+    //
     const ref = `refs/heads/${branch}`;
+    // 2a) create or reset branch
     try {
-      await octokit.git.createRef({ owner, repo, ref, sha: baseSha });
-    } catch (e) {
-      // already exists → update it
-      await octokit.git.updateRef({ owner, repo, ref, sha: baseSha, force: true });
+      await octokit.rest.git.createRef({ owner, repo, ref, sha: baseSha });
+    } catch (err) {
+      if (err.status === 422) {
+        // branch exists → reset it
+        await octokit.rest.git.updateRef({
+          owner, repo, ref,
+          sha: baseSha,
+          force: true
+        });
+      } else {
+        throw err;
+      }
     }
 
-    // 3) upload each image and index.md via createOrUpdateFileContents
+    // 2b) prepare one atomic commit
     const commitMessage = `Import blog submission #${issueNumber}: ${data.title.replace(/"/g, '\\"')}`;
+    const treeItems = [];
 
-    // 3a) upload featured image
-    await octokit.repos.createOrUpdateFileContents({
-      owner, repo, branch,
+    // featured image blob
+    const featBlob = await octokit.rest.git.createBlob({
+      owner, repo,
+      content: featuredAsset.buffer.toString("base64"),
+      encoding: "base64"
+    });
+    treeItems.push({
       path: `${repoImageDir}/${featuredAsset.filename}`,
-      message: commitMessage,
-      content: featuredAsset.buffer.toString("base64")
+      mode: "100644", type: "blob",
+      sha: featBlob.data.sha
     });
 
-    // 3b) upload inline images (from our pre-processed array)
+    // inline image blobs
     for (const { filename, buffer } of inlineAssets) {
-      await octokit.repos.createOrUpdateFileContents({
-        owner, repo, branch,
+      const blob = await octokit.rest.git.createBlob({
+        owner, repo,
+        content: buffer.toString("base64"),
+        encoding: "base64"
+      });
+      treeItems.push({
         path: `${repoImageDir}/${filename}`,
-        message: commitMessage,
-        content: buffer.toString("base64")
+        mode: "100644", type: "blob",
+        sha: blob.data.sha
       });
     }
 
-    // 3c) upload the markdown itself (use finalMarkdown)
-    await octokit.repos.createOrUpdateFileContents({
-      owner, repo, branch,
+    // markdown blob
+    const mdBlob = await octokit.rest.git.createBlob({
+      owner, repo,
+      content: Buffer.from(finalMarkdown).toString("base64"),
+      encoding: "base64"
+    });
+    treeItems.push({
       path: `${repoPostDir}/index.md`,
+      mode: "100644", type: "blob",
+      sha: mdBlob.data.sha
+    });
+
+    // 2c) build a tree off baseSha
+    const { data: tree } = await octokit.rest.git.createTree({
+      owner, repo,
+      base_tree: baseSha,
+      tree: treeItems
+    });
+
+    // 2d) make the commit
+    const { data: commit } = await octokit.rest.git.createCommit({
+      owner, repo,
       message: commitMessage,
-      content: Buffer.from(finalMarkdown).toString("base64")
+      tree: tree.sha,
+      parents: [baseSha]
+    });
+
+    // 2e) point our branch to the new commit
+    await octokit.rest.git.updateRef({
+      owner, repo,
+      ref,
+      sha: commit.sha,
+      force: true
     });
 
     // 4) open the PR on that branch
