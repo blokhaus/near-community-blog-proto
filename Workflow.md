@@ -10,9 +10,12 @@ This document outlines how the blog submission system works — from intake to a
 2. **GitHub Action runs validation** via `scripts/validate_submission.js`
 3. If valid:
    - The issue is labeled `valid-submission`
-   - A second GitHub Action creates a new branch + pull request
+   - A second step of the GitHub Action further optimizes the content, creates a new branch + pull request
 4. **Reviewers approve or edit the PR**
-5. **Merged PR** adds content to `content/posts/YYYY-MM-DD-title/`
+5. **Merged PR** adds content to `content/posts/YYYY-MM-DDThh-mm-ss-sssZ-<slug>/` on the default branch.
+
+Downstream from here:
+6. **Frontend Blog Code**  incorporates the approved post to the NEAR blog community section.
 
 ---
 
@@ -20,14 +23,15 @@ This document outlines how the blog submission system works — from intake to a
 
 Submissions must include:
 
-### ✅ Frontmatter (YAML)
+### ✅ Required Submission Fields
+Posts should include the fields defined in the blog submission issue template. Those fields will be used to generate the frontmatter in the published Markdown:
 ```yaml
 ---
 title: "Why I Love NEAR"
 description: "Exploring what makes NEAR special"
 author: "Jane Doe"
 subject: "Community"
-featuredImage: "https://user-images.githubusercontent.com/.../featured-near.png"
+featuredImage: "https://github.com/user-attachments/assets/<hash>?raw=true"
 submission: true
 ---
 ```
@@ -38,7 +42,7 @@ submission: true
 
 NEAR is fast, simple, and scalable.
 
-![Diagram](https://user-images.githubusercontent.com/.../image-1.png)
+![Diagram](https://github.com/user-attachments/assets/<hash>?raw=true)
 ```
 
 ---
@@ -48,20 +52,19 @@ NEAR is fast, simple, and scalable.
 ### Frontmatter:
 - `title`: max 100 characters, no control/invisible characters
 - `description`: max 300 characters, same constraints
-- `author`: must be present, clean
+- `author`: must be present, clean, at most 100 characters
 - `subject`: must be one of:
   - `Community`, `Developers`, `Ecosystem`, `DAOs`, `NFTs`, `Gaming`, `Web3 Gaming`, `User-Owned AI`
-- `featuredImage`: must be GitHub-hosted and start with `featured-`
+- `featuredImage`: must be GitHub-hosted and a valid URL (added via the issue editor)
 - `submission`: must be `true`
 
 ### Markdown Content:
 - Must be present
 - Must not contain raw HTML (`<div>`, `<script>`, etc.)
-- Must contain 1–2 inline images, each:
-  - Hosted on GitHub (`user-images.githubusercontent.com`)
-  - Named as `image-1.png`, `image-2.jpg`, etc.
-  - Must not exceed the maximum count
-  - Must match image index and order
+- May include up to two inline images:
+  - Hosted on GitHub Form assets (`user-attachments/assets/<hash>`)
+  - No fixed filename pattern required
+  - Inserted via the issue editor (drag & drop)
 
 ---
 
@@ -76,31 +79,22 @@ NEAR is fast, simple, and scalable.
 ## 🛠 Pull Request Generation
 
 Once labeled `valid-submission`, a GitHub Action:
-- Creates a new branch: `submissions/issue-123-title`
-- Commits sanitized content to `content/posts/...`
-- Opens a PR targeting `main`
+  - Creates a new branch of the form  
+    `submissions/issue-<ISSUE_NUMBER>-<ISO_TIMESTAMP>-<SLUG>`
+  - Commits sanitized content under `content/posts/<folder>/…`
+  - Opens a PR against the default branch
 
 The PR includes:
-- `index.md` with clean frontmatter and Markdown
-- `images/` folder with re-encoded, resized images
-
----
-
-## 📄 PR Preview
-
-On PR open, a GitHub Action:
-- Renders the post to HTML
-- Uploads it as an artifact
-- Comments with a preview link
-
-This allows reviewers to check layout and content before merging.
+  - `index.md` with clean frontmatter + post body
+  - an `images/` directory of optimized assets
 
 ---
 
 ## ✅ Final Approval
 
 Once a reviewer approves and merges the PR:
-- The post lives in `content/posts/YYYY-MM-DD-title/`
+- The post lives in `content/posts/<date>-<timestamp>-<slug>/`  
+  (e.g. `content/posts/2025-05-01T12-34-56-789Z-why-i-love-near`)
 - The issue is labeled `imported`
 
 From there, the post is ready to be published or exported by downstream systems.

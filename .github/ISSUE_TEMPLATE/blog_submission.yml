@@ -42,37 +42,17 @@ body:
     validations:
       required: true
 
+  # Only the featured image is required now…
   - type: input
     id: featuredImage
     attributes:
       label: "Featured Image URL"
-      description: "Drag an image into the Markdown editor below, then paste its URL here"
-      placeholder: "https://github.com/user-attachments/assets/…"
+      description: "Paste your GitHub Form upload URL for the featured image"
+      placeholder: "https://github.com/user-attachments/assets/…?raw=true"
     validations:
       required: true
-      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
-      pattern-error: "Must be a GitHub‑Form upload URL (…/assets/<uuid>)."
-
-  # — Optional inline images —
-  - type: input
-    id: image1
-    attributes:
-      label: "Optional Inline Image 1 URL"
-      description: "Drag an image into the editor below, then paste its URL here"
-      placeholder: "https://github.com/user-attachments/assets/…"
-    validations:
-      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
-      pattern-error: "Must be a GitHub‑Form upload URL."
-
-  - type: input
-    id: image2
-    attributes:
-      label: "Optional Inline Image 2 URL"
-      description: "Drag an image into the editor below, then paste its URL here"
-      placeholder: "https://github.com/user-attachments/assets/…"
-    validations:
-      pattern: "^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+$"
-      pattern-error: "Must be a GitHub‑Form upload URL."
+      pattern: '^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+(?:\\?raw=true)?$'
+      errorMessage: "Must be a GitHub form upload URL"
 
   # — Confirmation checkbox —
   - type: checkboxes
@@ -84,26 +64,14 @@ body:
         - label: I confirm this submission is final
           required: true
 
-  # — Full Markdown editor for the blog content —
+  # …and the Markdown body
   - type: textarea
     id: content
     attributes:
       label: "Blog Content"
-      description: |
-        Write your full blog post here.  
-        You can **drag & drop images** directly into this field to upload them.  
-        Supported types: `.png`, `.jpg`.  
-        (Tip: Upload images first, then reference them using standard Markdown `![alt](url)` syntax.)
+      description: "Write your post in Markdown. You may embed up to 2 other images; a third is only allowed if it’s the featured image."
       placeholder: |
-        Example:
-        ![Featured Image](https://github.com/user-attachments/assets/...)
-
-        Lorem ipsum dolor sit amet...
-
-        ![Alt text for image 1](https://github.com/user-attachments/assets/...)
-
-        More content...
-
-        ![Alt text for image 2](https://github.com/user-attachments/assets/...)
+        ## My Post Title
+        Start writing here…
     validations:
       required: true

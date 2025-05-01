@@ -41,7 +41,6 @@ Submissions are automatically validated and, if successful, converted into a pul
 | `.github/ISSUE_TEMPLATE/`     | Submission & general issue forms |
 | `.github/workflows/`          | GitHub Actions for validation, import, and preview |
 | `scripts/`                    | Validation and import scripts (Node.js) |
-| `tests/`                      | Jest test suite for submission validation |
 | `content/posts/`              | Where approved posts live (Markdown + images) |
 
 ---

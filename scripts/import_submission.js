@@ -2,27 +2,51 @@
 
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
-const fs = require("fs");
 const path = require("path");
 // use Node’s built‑in fetch (Node 18+)
 // no import needed
 const { fileTypeFromBuffer } = require("file-type");
 const sharp = require("sharp");
-const { execSync } = require("child_process");
-const {
-  slugifyTitle,
-  isGitHubImageUrl,
-  extractImageIndex,
-  formToFrontmatter
-} = require("./import_helpers");
+const { formToFrontmatter } = require("./import_helpers");
 
 /**
- * Turn a GitHub Form upload page URL into the actual raw S3 blob URL
+ * Turn a post title into a URL‑safe slug
+ */
+function slugifyTitle(title) {
+  // only used here, so inline slugify
+  const slugify = require("slugify");
+  return slugify(title || "", { lower: true, strict: true })
+    || `submission-${Date.now()}`;
+}
+
+/**
+ * Check that a URL is a GitHub Form asset upload
+ */
+function isGitHubImageUrl(url) {
+  return /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+(?:\?raw=true)?$/.test(url);
+}
+
+/**
+ * Turn a GitHub Form upload page URL into the actual raw‑blob URL
  */
 function toRawUrl(url) {
-  return url.startsWith("https://github.com/user-attachments/assets/")
-    ? `${url}?raw=true`
+  const base = url.split("?")[0];
+  return base.startsWith("https://github.com/user-attachments/assets/")
+    ? `${base}?raw=true`
     : url;
+}
+
+/**
+ * Fetch with a 5 s timeout
+ */
+async function fetchWithTimeout(input, init = {}) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 5000);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
 }
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
@@ -39,10 +63,7 @@ async function run() {
     repo,
     issue_number: issueNumber
   });
-  // If they already pasted real frontmatter, use it; otherwise convert the Form sections
-  const raw = issue.body.trim().startsWith("---")
-    ? issue.body
-    : formToFrontmatter(issue);
+  const raw = formToFrontmatter(issue);
 
   try {
     const parsed = matter(raw);
@@ -60,15 +81,32 @@ async function run() {
     const date = now.toISOString().split('T')[0];               // "YYYY‑MM‑DD"
     const timestamp = now.toISOString().replace(/[:.]/g, '-');      // "YYYY‑MM‑DDThh-mm-ss-sssZ"
     const folderName = `${date}-${timestamp}-${slug}`;
-    const branch = `submissions/issue-${issueNumber}-${timestamp}-${slug}`.substring(0, 60);
-    const postDir = path.join('content', 'posts', folderName);
-    const imageDir = path.join(postDir, 'images');
-    fs.mkdirSync(imageDir, { recursive: true });
+    // prevent any traversal characters or parent‑dir patterns in our name
+    if (
+      folderName.includes('/') ||
+      folderName.includes('\\') ||
+      folderName.includes('..')
+    ) {
+      throw new Error(`Invalid folder name (path injection): ${folderName}`);
+    }
+    // only truncate the slug segment so we keep the issue# and timestamp intact
+    const prefix = `submissions/issue-${issueNumber}-${timestamp}-`;
+    const maxSlugLen = 60 - prefix.length;
+    const safeSlug = slug.slice(0, maxSlugLen);
+    const branch = prefix + safeSlug;
+
+    // Repo‐relative paths (for Octokit) always use posix/
+    const repoPostDir = `content/posts/${folderName}`;
+    const repoImageDir = `${repoPostDir}/images`;
 
     // match inline images uploaded via the new Form host
     const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+)(?:\?raw=true)?\)/g;
     const images = [...content.matchAll(imageRegex)];
     let updatedContent = content;
+    // collect processed inline images
+    const inlineAssets = [];
+    // track filename collisions
+    const nameCount = new Map();
 
     for (const [, alt, url] of images) {
       // ensure it’s a Form‐hosted asset URL
@@ -76,80 +114,132 @@ async function run() {
         throw new Error(`Invalid inline image URL: ${url}`);
       }
 
-      const res = await fetch(toRawUrl(url), { redirect: "follow" });
+      const res = await fetchWithTimeout(toRawUrl(url), { redirect: "follow" });
       if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
 
       const arrayBuf = await res.arrayBuffer();
       const buffer = Buffer.from(arrayBuf);
 
-      const type = await fileTypeFromBuffer(buffer);
-      if (!type || !["image/png", "image/jpeg"].includes(type.mime)) {
-        throw new Error(`Invalid MIME type for image: ${type?.mime}`);
+      // determine format (normalize jpg→jpeg)
+      const rawType = await fileTypeFromBuffer(buffer);
+      if (!rawType || !["image/png", "image/jpeg"].includes(rawType.mime)) {
+        throw new Error(`Invalid MIME type for image: ${rawType?.mime}`);
       }
-
+      const ext = rawType.ext === "jpg" ? "jpeg" : rawType.ext;
       const base = path.basename(new URL(url).pathname);
-      const filename = `${base}.${type.ext}`;
-      const localPath = `./images/${filename}`;
-      const fullLocalPath = path.join(imageDir, filename);
-
-      const cleaned = await sharp(buffer).toFormat(type.ext).toBuffer();
-      fs.writeFileSync(fullLocalPath, cleaned);
-
-      updatedContent = updatedContent.replace(url, localPath);
+      // optional collision suffix
+      const seen = nameCount.get(base) || 0;
+      const filename = `${base}${seen > 0 ? `-${seen}` : ""}.${ext}`;
+      nameCount.set(base, seen + 1);
+      // sanitize filename against path injection
+      if (
+        filename.includes('/') ||
+        filename.includes('\\') ||
+        filename.includes('..')
+      ) {
+        throw new Error(`Invalid image filename (path injection): ${filename}`);
+      }
+      const cleaned = await sharp(buffer).toFormat(ext).toBuffer();
+      // queue for commit
+      inlineAssets.push({ filename, buffer: cleaned });
+      // point content at the new relative path, stripping any '?raw=true'
+      const rawQueryUrl = `${url}?raw=true`;
+      updatedContent = updatedContent.split(rawQueryUrl).join(`./images/${filename}`);
+      updatedContent = updatedContent.split(url).join(`./images/${filename}`);
     }
 
     // Fetch & write the featured image the same way
-    const featRes = await fetch(toRawUrl(data.featuredImage), { redirect: "follow" });
+    const featRes = await fetchWithTimeout(toRawUrl(data.featuredImage), { redirect: "follow" });
     if (!featRes.ok) throw new Error(`Failed to fetch featured image: ${data.featuredImage}`);
 
     const featArrayBuf = await featRes.arrayBuffer();
     const featBuf = Buffer.from(featArrayBuf);
 
-    const featType = await fileTypeFromBuffer(featBuf);
-    if (!featType || !["image/png", "image/jpeg"].includes(featType.mime)) {
-      throw new Error(`Invalid MIME type for featured image: ${featType?.mime}`);
+    const rawFeatType = await fileTypeFromBuffer(featBuf);
+    if (!rawFeatType || !["image/png", "image/jpeg"].includes(rawFeatType.mime)) {
+      throw new Error(`Invalid MIME type for featured image: ${rawFeatType?.mime}`);
     }
-
+    const featExt = rawFeatType.ext === "jpg" ? "jpeg" : rawFeatType.ext;
     const featBase = path.basename(new URL(data.featuredImage).pathname);
-    const featFilename = `${featBase}.${featType.ext}`;
-    const featLocalPath = `./images/${featFilename}`;
-    const featFullPath = path.join(imageDir, featFilename);
-    const featCleaned = await sharp(featBuf).toFormat(featType.ext).toBuffer();
-    fs.writeFileSync(featFullPath, featCleaned);
+    const featFilename = `${featBase}.${featExt}`;
+    const featCleaned = await sharp(featBuf).toFormat(featExt).toBuffer();
+    // queue for commit
+    const featuredAsset = { filename: featFilename, buffer: featCleaned };
+    // sanitize featured image filename against path injection
+    if (
+      featuredAsset.filename.includes('/') ||
+      featuredAsset.filename.includes('\\') ||
+      featuredAsset.filename.includes('..')
+    ) {
+      throw new Error(
+        `Invalid featured image filename (path injection): ${featuredAsset.filename}`
+      );
+    }
 
     const finalFrontmatter = {
       title: data.title,
       description: data.description,
       author: data.author,
       subject: data.subject,
-      featuredImage: featLocalPath,
+      featuredImage: `./images/${featFilename}`,
       publishDate: now.toISOString(),   // full timestamp
     };
 
-    // Write out the assembled post
+    // Assemble final Markdown (no local write; will upload via Octokit)
     const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
-    fs.writeFileSync(path.join(postDir, "index.md"), finalMarkdown);
 
-    // commit & push out your branch
-    execSync(`git config user.name "github-actions[bot]"`);
-    execSync(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-    execSync(`git checkout -B ${branch}`);                           // reset or create
-    execSync(`git add content/posts/${folderName}`);
-    execSync(`git commit -m "Import blog submission #${issueNumber}: ${data.title}"`);
-
-    // force‑overwrite the remote branch (ignore any fast‑forward checks)
-    execSync(`git push --force --set-upstream origin ${branch}`);
-
-    // fetch the real default branch name (e.g. “dev”)
+    // —— use Octokit to create a new branch & commit all files in one shot ——  
+    // 1) determine default-branch SHA  
     const { data: repoData } = await octokit.repos.get({ owner, repo });
-    const baseBranch = repoData.default_branch;
+    const base = repoData.default_branch;
+    const { data: baseBranch } = await octokit.repos.getBranch({ owner, repo, branch: base });
+    const baseSha = baseBranch.commit.sha;
 
+    // 2) create or reset our branch
+    const ref = `refs/heads/${branch}`;
+    try {
+      await octokit.git.createRef({ owner, repo, ref, sha: baseSha });
+    } catch (e) {
+      // already exists → update it
+      await octokit.git.updateRef({ owner, repo, ref, sha: baseSha, force: true });
+    }
+
+    // 3) upload each image and index.md via createOrUpdateFileContents
+    const commitMessage = `Import blog submission #${issueNumber}: ${data.title.replace(/"/g, '\\"')}`;
+
+    // 3a) upload featured image
+    await octokit.repos.createOrUpdateFileContents({
+      owner, repo, branch,
+      path: `${repoImageDir}/${featuredAsset.filename}`,
+      message: commitMessage,
+      content: featuredAsset.buffer.toString("base64")
+    });
+
+    // 3b) upload inline images (from our pre-processed array)
+    for (const { filename, buffer } of inlineAssets) {
+      await octokit.repos.createOrUpdateFileContents({
+        owner, repo, branch,
+        path: `${repoImageDir}/${filename}`,
+        message: commitMessage,
+        content: buffer.toString("base64")
+      });
+    }
+
+    // 3c) upload the markdown itself (use finalMarkdown)
+    await octokit.repos.createOrUpdateFileContents({
+      owner, repo, branch,
+      path: `${repoPostDir}/index.md`,
+      message: commitMessage,
+      content: Buffer.from(finalMarkdown).toString("base64")
+    });
+
+    // 4) open the PR on that branch
     pr = await octokit.pulls.create({
       owner,
       repo,
-      title: `Blog Submission from @${username} — “${data.title}”`,
+      title: `Blog Submission from @${username} — "${data.title}"`,
       head: branch,
-      base: baseBranch,    // ← use dynamic default branch
+      base,
       body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review the content and approve if ready to merge.`
     });
 
@@ -192,7 +282,7 @@ async function run() {
       lock_reason: "resolved"
     });
 
-    console.log(`✅ Imported submission to ${postDir}`);
+    console.log(`✅ Imported submission to ${repoPostDir}`);
 
   } catch (err) {
     console.error("❌ Import failed:", err);

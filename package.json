@@ -5,9 +5,6 @@
   "directories": {
     "test": "tests"
   },
-  "scripts": {
-    "test": "jest"
-  },
   "keywords": [],
   "author": "Blokhaus Team",
   "dependencies": {
