@@ -49,7 +49,7 @@ Submissions are automatically validated and, if successful, converted into a pul
 
 For a full breakdown of how validation, approval, and pull request workflows operate, see:
 
-📘 [docs/workflow.md](docs/workflow.md)
+📘 [docs/workflow.md](./workflow.md)
 
 ---
 
