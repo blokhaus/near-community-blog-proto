@@ -190,7 +190,7 @@ async function run() {
     // Assemble final Markdown (no local write; will upload via Octokit)
     const finalMarkdown = matter.stringify(updatedContent, finalFrontmatter);
 
-    // —— use Octokit to create a new branch & commit all files in one shot ——  
+    // —— use Octokit to create/reset branch & commit all files via Git Data API ——  
     // 1) determine default-branch SHA  
     const { data: repoData } = await octokit.repos.get({ owner, repo });
     const base = repoData.default_branch;
@@ -198,23 +198,32 @@ async function run() {
     const baseSha = baseBranch.commit.sha;
 
     //
-    // 2–3) CREATE + COMMIT ALL FILES VIA GIT DATA API ON OUR FEATURE BRANCH
+    // 2) create or reset our feature branch
     //
-    const ref = `refs/heads/${branch}`;
-    // 2a) create or reset branch
+    const gitRef = `refs/heads/${branch}`;
+    let exists = true;
     try {
-      await octokit.rest.git.createRef({ owner, repo, ref, sha: baseSha });
+      await octokit.rest.git.getRef({ owner, repo, ref: gitRef });
     } catch (err) {
-      if (err.status === 422) {
-        // branch exists → reset it
-        await octokit.rest.git.updateRef({
-          owner, repo, ref,
-          sha: baseSha,
-          force: true
-        });
+      if (err.status === 404) {
+        exists = false;
       } else {
         throw err;
       }
+    }
+    if (!exists) {
+      await octokit.rest.git.createRef({
+        owner, repo,
+        ref: gitRef,
+        sha: baseSha
+      });
+    } else {
+      await octokit.rest.git.updateRef({
+        owner, repo,
+        ref: gitRef,
+        sha: baseSha,
+        force: true
+      });
     }
 
     // 2b) prepare one atomic commit
@@ -277,7 +286,7 @@ async function run() {
     // 2e) point our branch to the new commit
     await octokit.rest.git.updateRef({
       owner, repo,
-      ref,
+      ref: `refs/heads/${branch}`,
       sha: commit.sha,
       force: true
     });
