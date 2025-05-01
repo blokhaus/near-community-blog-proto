@@ -17,7 +17,7 @@ Anyone can submit a blog post by opening a [new issue](../../issues/new/choose) 
 Submissions must:
 - Be written in Markdown
 - Include a properly formatted frontmatter block
-- Follow our [content guidelines](docs/workflow.md)
+- Follow our [content guidelines](Workflow.md)
 
 Submissions are automatically validated and, if successful, converted into a pull request for human review.
 
@@ -49,7 +49,7 @@ Submissions are automatically validated and, if successful, converted into a pul
 
 For a full breakdown of how validation, approval, and pull request workflows operate, see:
 
-📘 [docs/workflow.md](./workflow.md)
+📘 [Workflow.md](./Workflow.md)
 
 ---
 
