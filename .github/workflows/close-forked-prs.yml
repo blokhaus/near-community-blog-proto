@@ -1,0 +1,33 @@
+name: Auto‑close Forked PRs
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  close-forked-pr:
+    if: ${{ github.event.pull_request.head.repo.fork == true }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Close PR from fork
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            await github.rest.pulls.update({
+              owner: pr.base.repo.owner.login,
+              repo:  pr.base.repo.name,
+              pull_number: pr.number,
+              state: 'closed'
+            });
+            await github.rest.issues.createComment({
+              owner: pr.base.repo.owner.login,
+              repo:  pr.base.repo.name,
+              issue_number: pr.number,
+              body: "🚫 PRs from forks are not accepted. Please use the blog‑submission form instead."
+            });
