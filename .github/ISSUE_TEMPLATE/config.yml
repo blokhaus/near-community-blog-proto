@@ -1,0 +1,16 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 📝 Ask a Question or Start a Discussion
+    url: https://github.com/blokhaus/near-community-blog-proto/discussions
+    about: Use Discussions for non-urgent questions, brainstorming, or general ideas
+
+issue_templates:
+  - name: "General Issues"
+    description: "Report a bug, request a feature, or raise a technical concern"
+    file: general_issue.yml
+    
+  - name: "✍️ Submit a Blog Post"
+    description: "Publish your post on the NEAR Community Blog"
+    file: blog_submission.md
+

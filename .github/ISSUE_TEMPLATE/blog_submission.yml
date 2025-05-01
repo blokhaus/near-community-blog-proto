@@ -1,0 +1,77 @@
+name: "✍️ Submit a Blog Post"
+description: "Publish your post on the NEAR Community Blog"
+title: "[Blog] <Post Title>"
+labels: ["blog-submission"]
+
+body:
+  # — Required metadata —
+  - type: input
+    id: description
+    attributes:
+      label: "Description"
+      description: "Short summary (max 300 characters)"
+      placeholder: "A quick overview of your post"
+    validations:
+      required: true
+      max_length: 300
+
+  - type: input
+    id: author
+    attributes:
+      label: "Author"
+      description: "Your name or handle (max 100 characters)"
+      placeholder: "Jane Doe"
+    validations:
+      required: true
+      max_length: 100
+
+  - type: dropdown
+    id: subject
+    attributes:
+      label: "Subject"
+      description: "Choose a category"
+      options:
+        - Community
+        - Developers
+        - Ecosystem
+        - DAOs
+        - NFTs
+        - Gaming
+        - Web3 Gaming
+        - User-Owned AI
+    validations:
+      required: true
+
+  # Only the featured image is required now…
+  - type: input
+    id: featuredImage
+    attributes:
+      label: "Featured Image URL"
+      description: "Paste your GitHub Form upload URL for the featured image"
+      placeholder: "https://github.com/user-attachments/assets/…?raw=true"
+    validations:
+      required: true
+      pattern: '^https://github\\.com/user-attachments/assets/[0-9a-fA-F-]+(?:\\?raw=true)?$'
+      errorMessage: "Must be a GitHub form upload URL"
+
+  # — Confirmation checkbox —
+  - type: checkboxes
+    id: submission
+    attributes:
+      label: "Confirm submission"
+      description: "Check to confirm you’re ready to submit"
+      options:
+        - label: I confirm this submission is final
+          required: true
+
+  # …and the Markdown body
+  - type: textarea
+    id: content
+    attributes:
+      label: "Blog Content"
+      description: "Write your post in Markdown. You may embed up to 2 other images; a third is only allowed if it’s the featured image."
+      placeholder: |
+        ## My Post Title
+        Start writing here…
+    validations:
+      required: true

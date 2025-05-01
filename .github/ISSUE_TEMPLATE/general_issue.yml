@@ -1,0 +1,40 @@
+name: 🛠 General Issue
+description: Report a bug, request a feature, or raise a technical concern
+labels: ["general"]
+title: "[General] <Brief summary of the issue>"
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: Describe the issue
+      description: |
+        This can be a bug report, a feature request, a technical discussion, or any other non-submission topic.
+        
+        Try to include as much detail as you'd normally provide in a typical GitHub issue.
+      placeholder: |
+        Example:
+        - What were you trying to do?
+        - What did you expect to happen?
+        - What actually happened?
+        - How could we improve this?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce (if applicable)
+      description: Optional, but helpful for bugs or repeatable issues
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Environment or context (optional)
+      placeholder: e.g. OS, browser, terminal, etc.
+    validations:
+      required: false

@@ -1,0 +1,18 @@
+name: Guard Blog Content PRs
+
+on:
+  pull_request:
+    paths:
+      - 'content/posts/**'
+
+permissions:
+  contents: read
+
+jobs:
+  block_untrusted:
+    if: |
+      !startsWith(github.head_ref, 'submissions/') || 
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🚫 Blog content PR must come from a 'submissions/' branch." && exit 1
