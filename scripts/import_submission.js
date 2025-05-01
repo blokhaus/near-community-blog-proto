@@ -200,10 +200,13 @@ async function run() {
     //
     // 2) create or reset our feature branch
     //
-    const gitRef = `refs/heads/${branch}`;
+    const fullRef = `refs/heads/${branch}`;
+    const shortRef = `heads/${branch}`;
+
     let exists = true;
     try {
-      await octokit.rest.git.getRef({ owner, repo, ref: gitRef });
+      // GET /git/ref/:ref expects "heads/branch"
+      await octokit.rest.git.getRef({ owner, repo, ref: shortRef });
     } catch (err) {
       if (err.status === 404) {
         exists = false;
@@ -212,15 +215,17 @@ async function run() {
       }
     }
     if (!exists) {
+      // POST /git/refs requires the full "refs/heads/…"
       await octokit.rest.git.createRef({
         owner, repo,
-        ref: gitRef,
+        ref: fullRef,
         sha: baseSha
       });
     } else {
+      // PATCH /git/refs/:ref expects "heads/…"
       await octokit.rest.git.updateRef({
         owner, repo,
-        ref: gitRef,
+        ref: shortRef,
         sha: baseSha,
         force: true
       });
@@ -283,10 +288,10 @@ async function run() {
       parents: [baseSha]
     });
 
-    // 2e) point our branch to the new commit
+    // and again, updateRef must use the short form
     await octokit.rest.git.updateRef({
       owner, repo,
-      ref: `refs/heads/${branch}`,
+      ref: shortRef,
       sha: commit.sha,
       force: true
     });
