@@ -1,6 +1,6 @@
 name: "✍️ Submit a Blog Post"
 description: "Publish your post on the NEAR Community Blog"
-title: "[Blog] <Post Title>"
+title: "Your Blog Post Title"
 labels: ["blog-submission"]
 
 body:
@@ -47,7 +47,10 @@ body:
     id: featuredImage
     attributes:
       label: "Featured Image URL"
-      description: "Paste your GitHub Form upload URL for the featured image"
+      description: |
+        Upload your featured image in the Markdown section below, copy its URL, and paste it here.
+        You can then delete the image from the Markdown if you don't want it to appear in the article.
+        Max size: 1 MB
       placeholder: "https://github.com/user-attachments/assets/…?raw=true"
     validations:
       required: true
@@ -69,7 +72,9 @@ body:
     id: content
     attributes:
       label: "Blog Content"
-      description: "Write your post in Markdown. You may embed up to 2 other images; a third is only allowed if it’s the featured image."
+      description: |
+        Write your post in Markdown. You may embed up to 2 other images (each ≤ 1 MB);
+        a third image is only allowed if it’s the featured image.
       placeholder: |
         ## My Post Title
         Start writing here…

@@ -1,0 +1,27 @@
+name: Unlock on PR rejection
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  unlock-if-unmerged:
+    if: ${{ github.event.pull_request.merged == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract linked issue number
+        id: parse
+        run: |
+          ISSUE=$(echo "${{ github.event.pull_request.body }}" \
+            | grep -oE 'Closes #[0-9]+' \
+            | head -1 \
+            | sed 's/Closes #//')
+          echo "ISSUE=${ISSUE}" >> $GITHUB_ENV
+
+      - name: Log if no linked blog issue
+        if: ${{ env.ISSUE == '' }}
+        run: echo "No linked blog issue found in PR body; skipping unlock."
+
+      - name: Unlock linked issue
+        if: ${{ env.ISSUE != '' }}
+        run: |
+          gh api repos/$GITHUB_REPOSITORY/issues/${ISSUE}/unlock

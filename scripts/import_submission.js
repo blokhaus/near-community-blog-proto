@@ -63,6 +63,22 @@ async function run() {
     repo,
     issue_number: issueNumber
   });
+
+  // ── SKIP if there's already an open or merged PR for this issue
+  const { data: pulls } = await octokit.issues.listPullRequestsAssociatedWithIssue({
+    owner,
+    repo,
+    issue_number: issueNumber
+  });
+  const conflict = pulls.find(pr => pr.state === "open" || pr.merged_at);
+  if (conflict) {
+    console.log(
+      `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
+      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}); skipping.`
+    );
+    return;
+  }
+
   const raw = formToFrontmatter(issue);
 
   try {
@@ -302,18 +318,26 @@ async function run() {
       title: `Blog Submission from @${username} — "${data.title}"`,
       head: branch,
       base,
-      body: `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).\n\nPlease review.`
+      body: [
+        `This blog post was submitted via [issue #${issueNumber}](https://github.com/${owner}/${repo}/issues/${issueNumber}).`,
+        "",
+        `Closes #${issueNumber}`
+      ].join("\n")
     });
 
-    // unlock, comment, add “imported” label
+    // unlock, clean up old failure labels, comment & add valid-submission+imported
     await octokit.issues.unlock({ owner, repo, issue_number: issueNumber });
+    await octokit.issues.removeLabel({
+      owner, repo, issue_number: issueNumber,
+      name: "invalid"
+    }).catch(() => { });
     await octokit.issues.createComment({
       owner, repo, issue_number: issueNumber,
       body: `✅ Submission has been converted into [PR #${pr.data.number}](${pr.data.html_url}).`
     });
     await octokit.issues.addLabels({
       owner, repo, issue_number: issueNumber,
-      labels: ["imported"],
+      labels: ["valid-submission", "imported"]
     });
 
     // clear any old “import-failed” label
@@ -326,9 +350,19 @@ async function run() {
       });
     } catch (e) { /* ignore if it wasn’t there */ }
 
-    // close & re‑lock
-    await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: "closed" });
-    await octokit.issues.lock({ owner, repo, issue_number: issueNumber, lock_reason: "resolved" });
+    // close & re-lock
+    await octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "closed"
+    });
+    await octokit.issues.lock({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      lock_reason: "resolved"
+    });
 
     console.log(`✅ Imported submission to ${repoPostDir}`);
   } catch (err) {

@@ -19,6 +19,7 @@ const SUBJECT_WHITELIST = [
 ];
 
 const MAX_IMAGE_COUNT = 2;
+const MAX_IMAGE_SIZE = 1024 * 1024; // 1 MB
 const INVALID_CHARS_REGEX = /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F\u200B\u202E]/g;
 // allow optional ?raw=true at end
 const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+(?:\?raw=true)?$/;
@@ -150,25 +151,46 @@ function validateMarkdownContent(content) {
 }
 
 /** 
- * HEAD‐check (with GET fallback) to confirm Content‐Type=image/* 
+ * HEAD‐check (with GET fallback) to confirm Content‐Type=image/* and size
  */
 async function isImageUrl(url) {
-  // 1) Point at the raw blob endpoint
   const rawUrl = url.startsWith("https://github.com/user-attachments/assets/")
     ? `${url}?raw=true`
     : url;
 
-  // 3) HEAD/GET with 5 s timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
-    let res = await fetch(rawUrl, { method: "HEAD", redirect: "follow", signal: controller.signal });
+    // 1) Try HEAD
+    let res = await fetch(rawUrl, {
+      method: "HEAD", redirect: "follow", signal: controller.signal
+    });
+    // 2) Fallback to GET if HEAD disallowed
     if (!res.ok || (res.status >= 300 && res.status < 400)) {
-      res = await fetch(rawUrl, { method: "GET", redirect: "follow", signal: controller.signal });
+      res = await fetch(rawUrl, {
+        method: "GET", redirect: "follow", signal: controller.signal
+      });
     }
     if (!res.ok) return false;
+
+    // 3) Content-Type check
     const ct = res.headers.get("content-type") || "";
-    return ct.startsWith("image/");
+    if (!ct.startsWith("image/")) return false;
+
+    // 4) Size check: use HEAD header if present, else GET + measure
+    const lenHeader = res.headers.get("content-length");
+    let length;
+    if (lenHeader) {
+      length = Number(lenHeader);
+    } else {
+      // no header on HEAD → fetch full body
+      const getRes = await fetch(rawUrl, { method: "GET", redirect: "follow", signal: controller.signal });
+      if (!getRes.ok) return false;
+      const buf = await getRes.arrayBuffer();
+      length = buf.byteLength;
+    }
+    if (length > MAX_IMAGE_SIZE) return false;
+    return true;
   } catch {
     return false;
   } finally {
@@ -185,9 +207,31 @@ if (require.main === module) {
 
 async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-  const issueNumber = process.env.ISSUE_NUMBER;
+  const issueNumber = Number(process.env.ISSUE_NUMBER);
 
   const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
+
+  // lock immediately to prevent mid‐stream edits
+  await octokit.issues.lock({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    lock_reason: "resolved"
+  });
+
+  // ── NEW: bail if there’s already an open or merged PR for this issue
+  const { data: pulls } = await octokit.issues.listPullRequestsAssociatedWithIssue({
+    owner, repo, issue_number: issueNumber
+  });
+  const conflict = pulls.find(pr => pr.state === "open" || pr.merged_at);
+  if (conflict) {
+    console.log(
+      `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
+      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}); skipping.`
+    );
+    return;
+  }
+
   const issueBody = issue.body;
   const issueUser = issue.user.login;
   const labels = issue.labels.map(label => label.name);
@@ -244,10 +288,13 @@ async function run() {
   // 2) Reject huge front-matter
   const fmText = raw.split('---')[1] || '';
   if (fmText.length > 2048) throw new Error('Front-matter too large');
-  // 3) Fail fast on too many inline images
-  const images = [...content.matchAll(imageRegex)];
-  if (images.length > MAX_IMAGE_COUNT + 1) {
-    throw new Error(`Too many inline images: max is ${MAX_IMAGE_COUNT}`);
+  // 3) Fail fast on too many *unique* inline images
+  const allMatches = [...content.matchAll(imageRegex)].map(m => m[0]);
+  const uniqInline = [...new Set(allMatches)];
+  if (uniqInline.length > MAX_IMAGE_COUNT + 1) {
+    throw new Error(
+      `Too many inline images: found ${uniqInline.length}, max is ${MAX_IMAGE_COUNT}`
+    );
   }
 
   let parsed;
@@ -267,12 +314,12 @@ async function run() {
 
   // only if no sync errors do we do the HEAD check
   if (allErrors.length === 0) {
-    // Featured image HEAD check
+    // 1) Featured image: type + size
     if (!(await isImageUrl(parsed.data.featuredImage))) {
-      allErrors.push("Featured Image URL did not return image Content-Type");
+      allErrors.push("Featured Image URL invalid, not an image, or exceeds size limit");
     }
-    // Inline images HEAD check & count vs. featuredImage
-    // reuse shared `md` for inline images
+
+    // 2) Inline images: each must be valid via isImageUrl()
     const toks2 = md.parse(parsed.content, {});
     const inline = [];
     (function walk(nodes) {
@@ -284,23 +331,16 @@ async function run() {
         if (t.children) walk(t.children);
       }
     })(toks2);
-
-    // dedupe
     const uniqInline = [...new Set(inline)];
-    // must remove featuredImage from inline‑count
     const withoutFeat = uniqInline.filter(u => u !== parsed.data.featuredImage);
 
-    // 1) every inline must be a real image
     for (const url of uniqInline) {
-      if (!(await isImageUrl(url))) {
-        allErrors.push(`Inline image URL is not an image: ${url}`);
+      if (!await isImageUrl(url)) {
+        allErrors.push(`Inline image invalid, not an image, or too large: ${url}`);
       }
     }
-    // 2) enforce no more than 2 distinct non‑featured inline URLs
     if (withoutFeat.length > MAX_IMAGE_COUNT) {
-      allErrors.push(
-        `Too many inline images: found ${withoutFeat.length}, max allowed is ${MAX_IMAGE_COUNT}.`
-      );
+      allErrors.push(`Too many inline images: found ${withoutFeat.length}, max allowed is ${MAX_IMAGE_COUNT}.`);
     }
   }
 
@@ -308,39 +348,17 @@ async function run() {
     return await reject("Validation failed:\n\n- " + allErrors.join("\n- "));
   }
 
-  if (labels.includes("invalid")) {
-    await octokit.issues.removeLabel({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      name: "invalid"
-    });
-  }
-
-  // ✅ now comment & label valid
-  await octokit.issues.createComment({
-    owner, repo, issue_number: issueNumber,
-    body: `✅ Your submission has passed initial validation and is under review.`
-  });
-  await octokit.issues.addLabels({
-    owner, repo, issue_number: issueNumber,
-    labels: ["valid-submission"]
-  });
-
-  // lock issue to prevent further edits after validation
-  await octokit.issues.lock({
-    owner,
-    repo,
-    issue_number: issueNumber,
-    lock_reason: "resolved"
-  });
+  // on success: leave the issue locked and exit
+  return;
 }
 
 async function reject(reason) {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const issue_number = parseInt(process.env.ISSUE_NUMBER, 10);
 
-  // 1) Remove valid‑submission if it’s there
+  await octokit.issues.unlock({ owner, repo, issue_number });
+
+  // 1) Remove valid-submission if it’s there
   try {
     await octokit.issues.removeLabel({
       owner,
