@@ -5,6 +5,7 @@ const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
 const { formToFrontmatter } = require("./import_helpers");
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+const yaml = require('js-yaml');
 
 const SUBJECT_WHITELIST = [
   "Community",
@@ -240,9 +241,22 @@ async function run() {
     );
   }
 
+  // 2) Reject huge front-matter
+  const fmText = raw.split('---')[1] || '';
+  if (fmText.length > 2048) throw new Error('Front-matter too large');
+  // 3) Fail fast on too many inline images
+  const images = [...content.matchAll(imageRegex)];
+  if (images.length > MAX_IMAGE_COUNT + 1) {
+    throw new Error(`Too many inline images: max is ${MAX_IMAGE_COUNT}`);
+  }
+
   let parsed;
   try {
-    parsed = matter(raw);
+    parsed = matter(raw, {
+      engines: {
+        yaml: s => yaml.load(s, { schema: yaml.SAFE_SCHEMA })
+      }
+    });
   } catch (e) {
     return await reject("Unable to parse frontmatter: " + e.message);
   }
