@@ -12,6 +12,8 @@ const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
 
 // allow longer slugs by basing truncation on branch max length
 const MAX_BRANCH_LENGTH = 150;
+// max total images allowed per submission: optional featured + up to 2 inline
+const MAX_IMAGE_COUNT = 3;
 
 /**
  * Turn a post title into a URL‑safe slug
@@ -123,16 +125,26 @@ async function run() {
     const repoPostDir = `content/posts/${folderName}`;
     const repoImageDir = `${repoPostDir}/images`;
 
-    // match inline images uploaded via the new Form host
+    // match inline images uploaded via the new Form host, dedupe URLs
     const imageRegex = /!\[(.*?)\]\((https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+)(?:\?raw=true)?\)/g;
-    const images = [...content.matchAll(imageRegex)];
+    const matches = [...content.matchAll(imageRegex)];
+    // unique URLs (skip featuredImage if used inline)
+    const uniqueUrls = [...new Set(matches.map(([, , url]) => url))]
+      .filter(u => u !== data.featuredImage);
+    // enforce total image count: featuredImage (optionally inline) + other inline images
+    if (uniqueUrls.length > MAX_IMAGE_COUNT) {
+      throw new Error(
+        `Too many images: found ${uniqueUrls.length} (featured + inline), max allowed is ${MAX_IMAGE_COUNT}.`
+      );
+    }
+
     let updatedContent = content;
     // collect processed inline images
     const inlineAssets = [];
     // track filename collisions
     const nameCount = new Map();
 
-    for (const [, alt, url] of images) {
+    for (const url of uniqueUrls) {
       // ensure it’s a Form‐hosted asset URL
       if (!isGitHubImageUrl(url)) {
         throw new Error(`Invalid inline image URL: ${url}`);
@@ -169,15 +181,9 @@ async function run() {
       // point content at the new relative path, stripping any '?raw=true'
       const rawQueryUrl = `${url}?raw=true`;
       // reference images relative to index.md
-      updatedContent = updatedContent.split(rawQueryUrl).join(`images/${filename}`);
-      updatedContent = updatedContent.split(url).join(`images/${filename}`);
-    }
-
-    // hard cap on number of inline images imported
-    if (inlineAssets.length > MAX_IMAGE_COUNT) {
-      throw new Error(
-        `Too many inline images imported: found ${inlineAssets.length}, max is ${MAX_IMAGE_COUNT}.`
-      );
+      updatedContent = updatedContent
+        .split(rawQueryUrl).join(`images/${filename}`)
+        .split(url).join(`images/${filename}`);
     }
 
     // Fetch & write the featured image the same way
