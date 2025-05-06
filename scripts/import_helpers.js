@@ -77,6 +77,39 @@ function formToFrontmatter(issue) {
   ].join("\n");
 }
 
+/**
+ * Scan an issue’s comments for bot‐posted “Submission has been converted into [PR #123]” notices,
+ * then fetch each PR and return the first one that is open or merged.
+ *
+ * @param {import("@octokit/rest").Octokit} octokit
+ * @param {string} owner
+ * @param {string} repo
+ * @param {number} issueNumber
+ * @returns {Promise<import("@octokit/rest").components["schemas"]["pull-request"]|null>}
+ */
+async function findAssociatedPr(octokit, owner, repo, issueNumber) {
+  const { data: comments } = await octokit.issues.listComments({
+    owner, repo, issue_number: issueNumber, per_page: 100
+  });
+  const prComments = comments.filter(c =>
+    c.user.login === "github-actions[bot]" &&
+    /Submission has been converted into \[PR #\d+\]/.test(c.body)
+  );
+  for (const c of prComments) {
+    const m = c.body.match(/Submission has been converted into \[PR #(\d+)\]/);
+    if (!m) continue;
+    const prNumber = Number(m[1]);
+    const { data: pr } = await octokit.pulls.get({
+      owner, repo, pull_number: prNumber
+    });
+    if (pr.state === "open" || pr.merged_at) {
+      return pr;
+    }
+  }
+  return null;
+}
+
 module.exports = {
-  formToFrontmatter
+  formToFrontmatter,
+  findAssociatedPr
 };

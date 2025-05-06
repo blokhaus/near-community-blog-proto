@@ -7,7 +7,7 @@ const path = require("path");
 // no import needed
 const { fileTypeFromBuffer } = require("file-type");
 const sharp = require("sharp");
-const { formToFrontmatter } = require("./import_helpers");
+const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
 
 /**
  * Turn a post title into a URL‑safe slug
@@ -64,13 +64,8 @@ async function run() {
     issue_number: issueNumber
   });
 
-  // ── SKIP if there's already an open or merged PR for this issue
-  const { data: pulls } = await octokit.issues.listPullRequestsAssociatedWithIssue({
-    owner,
-    repo,
-    issue_number: issueNumber
-  });
-  const conflict = pulls.find(pr => pr.state === "open" || pr.merged_at);
+  // ── SKIP if there’s already an open or merged PR for this issue via helper
+  const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);
   if (conflict) {
     console.log(
       `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
@@ -295,6 +290,17 @@ async function run() {
       base_tree: baseSha,
       tree: treeItems
     });
+
+    // ── RACE GUARD: re-check for an associated PR right before we commit
+    const conflictBeforeCommit = await findAssociatedPr(octokit, owner, repo, issueNumber);
+    if (conflictBeforeCommit) {
+      console.log(
+        `↩️ Issue #${issueNumber} got PR #${conflictBeforeCommit.number} ` +
+        `(${conflictBeforeCommit.state}${conflictBeforeCommit.merged_at ? ", merged" : ""}); ` +
+        `aborting import to avoid race condition.`
+      );
+      return;
+    }
 
     // 2d) make the commit
     const { data: commit } = await octokit.rest.git.createCommit({

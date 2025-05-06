@@ -3,7 +3,7 @@
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
-const { formToFrontmatter } = require("./import_helpers");
+const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const yaml = require('js-yaml');
 
@@ -219,11 +219,8 @@ async function run() {
     lock_reason: "resolved"
   });
 
-  // ── NEW: bail if there’s already an open or merged PR for this issue
-  const { data: pulls } = await octokit.issues.listPullRequestsAssociatedWithIssue({
-    owner, repo, issue_number: issueNumber
-  });
-  const conflict = pulls.find(pr => pr.state === "open" || pr.merged_at);
+  // ── NEW: bail if there’s already an open or merged PR for this issue via bot comments
+  const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);
   if (conflict) {
     console.log(
       `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
