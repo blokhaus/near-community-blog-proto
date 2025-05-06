@@ -8,7 +8,7 @@ const path = require("path");
 // no import needed
 const { fileTypeFromBuffer } = require("file-type");
 const sharp = require("sharp");
-const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
+const { formToFrontmatter, findAssociatedPr, snapshotIssue } = require("./import_helpers");
 
 // allow longer slugs by basing truncation on branch max length
 const MAX_BRANCH_LENGTH = 150;
@@ -69,6 +69,18 @@ async function run() {
     repo,
     issue_number: issueNumber
   });
+  // snapshot & hash to work from an immutable copy of the issue
+  const { snapshot, hash: currentHash } = snapshotIssue(issue);
+  if (currentHash !== process.env.SUBMISSION_HASH) {
+    throw new Error(
+      'Issue content changed since validation (hash mismatch). Aborting import.'
+    );
+  }
+  // override live issue properties so all downstream logic uses our snapshot
+  issue.title = snapshot.title;
+  issue.body = snapshot.body;
+  issue.user = { login: snapshot.user };
+  issue.labels = snapshot.labels.map(name => ({ name }));
 
   // ── ERROR OUT if there’s already an open or merged PR
   const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);

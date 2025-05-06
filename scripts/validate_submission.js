@@ -3,7 +3,7 @@
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
 const MarkdownIt = require("markdown-it");
-const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
+const { formToFrontmatter, findAssociatedPr, snapshotIssue } = require("./import_helpers");
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const yaml = require('js-yaml');
 
@@ -255,11 +255,18 @@ async function run() {
     lock_reason: "resolved"
   });
 
+  // 📌 snapshot & hash right after locking – work off this immutable snapshot for every check
+  const { snapshot, hash } = snapshotIssue(issue);
+  // override live issue fields so the rest of the script only reads from our snapshot
+  issue.body = snapshot.body;
+  issue.user = { login: snapshot.user };
+  issue.labels = snapshot.labels.map(name => ({ name }));
+
   // ── ERROR OUT if there’s already an open or merged PR for this issue
   const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);
   if (conflict) {
-    return await reject(
-      `Issue #${issueNumber} already has an associated PR #${conflict.number} ` +
+    throw new Error(
+      `Issue #${issueNumber} already has PR #${conflict.number} ` +
       `(${conflict.state}${conflict.merged_at ? ", merged" : ""}).`
     );
   }
@@ -393,7 +400,9 @@ async function run() {
     return await reject("Validation failed:\n\n- " + allErrors.join("\n- "));
   }
 
-  // on success: leave the issue locked and exit
+  // emit the hash we computed at the top
+  require('fs').appendFileSync(process.env.GITHUB_OUTPUT, `submission_hash=${hash}\n`);
+
   return;
 }
 

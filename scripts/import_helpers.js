@@ -1,7 +1,6 @@
-// scripts/import_helpers.js
-
 const MarkdownIt = require("markdown-it");
 const md = new MarkdownIt({ html: false });
+const crypto = require("crypto");
 
 /**
  * Convert the GitHub Form “### …” sections into a YAML front‑matter + Markdown body
@@ -109,7 +108,28 @@ async function findAssociatedPr(octokit, owner, repo, issueNumber) {
   return null;
 }
 
+/**
+ * Create a canonical snapshot of the issue and return its SHA-256 hash.
+ */
+function snapshotIssue(issue) {
+  const snapshot = {
+    number: issue.number,
+    title: issue.title,
+    body: issue.body,
+    user: issue.user.login,
+    labels: issue.labels.map(l => l.name),
+    created_at: issue.created_at,
+    updated_at: issue.updated_at
+  };
+  const hash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(snapshot))
+    .digest("hex");
+  return { snapshot, hash };
+}
+
 module.exports = {
   formToFrontmatter,
-  findAssociatedPr
+  findAssociatedPr,
+  snapshotIssue
 };
