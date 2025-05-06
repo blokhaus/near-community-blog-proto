@@ -64,7 +64,7 @@ async function run() {
   let pr;
 
   // Fetch the full issue so we have title + body
-  const { data: issue } = await octokit.issues.get({
+  let { data: issue } = await octokit.issues.get({
     owner,
     repo,
     issue_number: issueNumber

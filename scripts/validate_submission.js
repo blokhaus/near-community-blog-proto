@@ -245,8 +245,6 @@ async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const issueNumber = Number(process.env.ISSUE_NUMBER);
 
-  const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
-
   // lock immediately to prevent mid‐stream edits
   await octokit.issues.lock({
     owner,
@@ -254,6 +252,8 @@ async function run() {
     issue_number: issueNumber,
     lock_reason: "resolved"
   });
+
+  let { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
 
   // 📌 snapshot & hash right after locking – work off this immutable snapshot for every check
   const { snapshot, hash } = snapshotIssue(issue);
@@ -276,8 +276,6 @@ async function run() {
   const labels = issue.labels.map(label => label.name);
 
   if (issue.state === "closed") return;
-
-  if (labels.includes("valid-submission")) return;
 
   // 🚀 fetch ALL open issues by this user (not just the first page)
   const allIssues = await octokit.paginate(
