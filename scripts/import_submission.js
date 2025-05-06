@@ -2,12 +2,16 @@
 
 const { Octokit } = require("@octokit/rest");
 const matter = require("gray-matter");
+const yaml = require("js-yaml");
 const path = require("path");
 // use Node’s built‑in fetch (Node 18+)
 // no import needed
 const { fileTypeFromBuffer } = require("file-type");
 const sharp = require("sharp");
 const { formToFrontmatter, findAssociatedPr } = require("./import_helpers");
+
+// allow longer slugs by basing truncation on branch max length
+const MAX_BRANCH_LENGTH = 150;
 
 /**
  * Turn a post title into a URL‑safe slug
@@ -53,7 +57,7 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-  const issueNumber = process.env.ISSUE_NUMBER;
+  const issueNumber = Number(process.env.ISSUE_NUMBER);
   const username = process.env.ISSUE_USER;
   let pr;
 
@@ -77,7 +81,11 @@ async function run() {
   const raw = formToFrontmatter(issue);
 
   try {
-    const parsed = matter(raw);
+    const parsed = matter(raw, {
+      engines: {
+        yaml: s => yaml.load(s, { schema: yaml.SAFE_SCHEMA })
+      }
+    });
     const { data, content } = parsed;
 
     if (!data.submission) {
@@ -102,9 +110,14 @@ async function run() {
     }
     // only truncate the slug segment so we keep the issue# and timestamp intact
     const prefix = `submissions/issue-${issueNumber}-${timestamp}-`;
-    const maxSlugLen = 60 - prefix.length;
+    // truncate slug so branch <= MAX_BRANCH_LENGTH
+    const maxSlugLen = MAX_BRANCH_LENGTH - prefix.length;
     const safeSlug = slug.slice(0, maxSlugLen);
     const branch = prefix + safeSlug;
+    // hard cap branch length to avoid Git ref limits
+    if (branch.length > MAX_BRANCH_LENGTH) {
+      throw new Error(`Branch name too long (${branch.length} chars), max is ${MAX_BRANCH_LENGTH}.`);
+    }
 
     // Repo‐relative paths (for Octokit) always use posix/
     const repoPostDir = `content/posts/${folderName}`;
@@ -158,6 +171,13 @@ async function run() {
       // reference images relative to index.md
       updatedContent = updatedContent.split(rawQueryUrl).join(`images/${filename}`);
       updatedContent = updatedContent.split(url).join(`images/${filename}`);
+    }
+
+    // hard cap on number of inline images imported
+    if (inlineAssets.length > MAX_IMAGE_COUNT) {
+      throw new Error(
+        `Too many inline images imported: found ${inlineAssets.length}, max is ${MAX_IMAGE_COUNT}.`
+      );
     }
 
     // Fetch & write the featured image the same way
@@ -391,6 +411,9 @@ async function run() {
       owner, repo, issue_number: issueNumber,
       lock_reason: "resolved"
     });
+
+    // exit non-zero so CI knows import failed
+    process.exit(1);
 
     return; // ensure we never proceed to PR creation
   }

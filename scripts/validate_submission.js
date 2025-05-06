@@ -24,6 +24,9 @@ const INVALID_CHARS_REGEX = /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F\u200B\u202E]/g;
 // allow optional ?raw=true at end
 const ASSET_URL_REGEX = /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-fA-F-]+(?:\?raw=true)?$/;
 
+// match Markdown inline images: ![alt](url)
+const imageRegex = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+
 /**
  * Escape Markdown‐sensitive characters in a string
  */
@@ -33,6 +36,23 @@ function esc(str) {
 
 // 1) single shared parser
 const md = new MarkdownIt({ html: true });
+
+/**
+ * Recursively extract image URLs from Markdown-It tokens
+ */
+function extractImageUrls(tokens) {
+  const urls = [];
+  (function walk(nodes) {
+    for (const t of nodes) {
+      if (t.type === "image") {
+        const src = t.attrGet("src");
+        if (src) urls.push(src);
+      }
+      if (t.children) walk(t.children);
+    }
+  })(tokens);
+  return urls;
+}
 
 function validateFrontmatter(data) {
   const errors = [];
@@ -102,45 +122,30 @@ function validateFrontmatter(data) {
   return { valid: errors.length === 0, errors };
 }
 
-function validateMarkdownContent(content) {
+/**
+ * Validate Markdown body using pre-parsed tokens
+ */
+function validateMarkdownContent(content, tokens) {
   const errors = [];
-
   if (!content || typeof content !== "string") {
     errors.push("Missing Markdown body content.");
     return { valid: false, errors };
   }
 
-  // Reject control / invisible characters in the body
+  // Reject control / invisible characters
   if (INVALID_CHARS_REGEX.test(content)) {
     errors.push("Blog content contains invalid control or invisible characters.");
   }
 
-  // using shared `md`
-  const tokens = md.parse(content, {});
-
-  // Check for raw HTML tokens
-  const hasRawHtml = tokens.some(token => token.type === "html_block" || token.type === "html_inline");
-
+  // Check for raw HTML
+  const hasRawHtml = tokens.some(t => t.type === "html_block" || t.type === "html_inline");
   if (hasRawHtml) {
     errors.push("Raw HTML tags are not allowed. Please remove any HTML from your Markdown content.");
-    // continue collecting other errors rather than returning early
   }
 
-  // --- only enforce host‑pattern on every real Markdown image token ---
-  // using shared `md` for image tokens
-  const toksImg = md.parse(content, {});
-  const inlineUrls = [];
-  (function walk(nodes) {
-    for (const t of nodes) {
-      if (t.type === "image") {
-        const src = t.attrGet("src");
-        if (src) inlineUrls.push(src);
-      }
-      if (t.children) walk(t.children);
-    }
-  })(toksImg);
+  // Enforce host‐pattern on every image token
+  const inlineUrls = extractImageUrls(tokens);
 
-  // each URL must be a GitHub form upload
   for (const url of inlineUrls) {
     if (!ASSET_URL_REGEX.test(url)) {
       errors.push(`Invalid inline image URL: ${url}`);
@@ -158,52 +163,83 @@ async function isImageUrl(url) {
     ? `${url}?raw=true`
     : url;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // 1) HEAD check with 5 s timeout
+  let res;
+  const headController = new AbortController();
+  const headTimeout = setTimeout(() => headController.abort(), 5000);
   try {
-    // 1) Try HEAD
-    let res = await fetch(rawUrl, {
-      method: "HEAD", redirect: "follow", signal: controller.signal
+    res = await fetch(rawUrl, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: headController.signal
     });
-    // 2) Fallback to GET if HEAD disallowed
-    if (!res.ok || (res.status >= 300 && res.status < 400)) {
+  } catch {
+    clearTimeout(headTimeout);
+    return false;
+  }
+  clearTimeout(headTimeout);
+
+  // 2) Fallback to GET or if redirect, with 30 s timeout
+  if (!res.ok || (res.status >= 300 && res.status < 400)) {
+    const getController = new AbortController();
+    const getTimeout = setTimeout(() => getController.abort(), 30000);
+    try {
       res = await fetch(rawUrl, {
-        method: "GET", redirect: "follow", signal: controller.signal
+        method: "GET",
+        redirect: "follow",
+        signal: getController.signal
       });
+    } catch {
+      clearTimeout(getTimeout);
+      return false;
     }
-    if (!res.ok) return false;
+    clearTimeout(getTimeout);
+  }
+  if (!res.ok) return false;
 
-    // 3) Content-Type check
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.startsWith("image/")) return false;
+  // 3) Content-Type check
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.startsWith("image/")) return false;
 
-    // 4) Size check: use HEAD header if present, else GET + measure
-    const lenHeader = res.headers.get("content-length");
-    let length;
-    if (lenHeader) {
-      length = Number(lenHeader);
-    } else {
-      // no header on HEAD → fetch full body
-      const getRes = await fetch(rawUrl, { method: "GET", redirect: "follow", signal: controller.signal });
-      if (!getRes.ok) return false;
+  // 4) Size check: prefer Content-Length, else fetch body with 30 s timeout
+  const lenHeader = res.headers.get("content-length");
+  let length;
+  if (lenHeader) {
+    length = Number(lenHeader);
+  } else {
+    const getController2 = new AbortController();
+    const getTimeout2 = setTimeout(() => getController2.abort(), 30000);
+    try {
+      const getRes = await fetch(rawUrl, {
+        method: "GET",
+        redirect: "follow",
+        signal: getController2.signal
+      });
+      if (!getRes.ok) {
+        clearTimeout(getTimeout2);
+        return false;
+      }
       const buf = await getRes.arrayBuffer();
       length = buf.byteLength;
+    } catch {
+      clearTimeout(getTimeout2);
+      return false;
     }
-    if (length > MAX_IMAGE_SIZE) return false;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(getTimeout2);
   }
+
+  return length <= MAX_IMAGE_SIZE;
 }
 
 if (require.main === module) {
-  run().catch(err => {
-    console.error("Unhandled error:", err);
-    process.exit(1);
-  });
+  run()
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error("Unhandled error:", err);
+      process.exit(1);
+    });
 }
+
 
 async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
@@ -285,12 +321,18 @@ async function run() {
   // 2) Reject huge front-matter
   const fmText = raw.split('---')[1] || '';
   if (fmText.length > 2048) throw new Error('Front-matter too large');
-  // 3) Fail fast on too many *unique* inline images
-  const allMatches = [...content.matchAll(imageRegex)].map(m => m[0]);
-  const uniqInline = [...new Set(allMatches)];
-  if (uniqInline.length > MAX_IMAGE_COUNT + 1) {
+
+  // 3) 🚨 Early sanity check on raw input (before full parse)
+  // Fail fast on too many *unique* inline images in the input
+  // This avoids heavy parsing or API fetches in clearly invalid cases.
+  // pull out only the Markdown body (skip YAML front-matter)
+
+  const allMatches = [...raw.matchAll(imageRegex)].map(m => m[1]);
+
+  const uniqEarlyInline = [...new Set(allMatches)];
+  if (uniqEarlyInline.length > MAX_IMAGE_COUNT + 2) {
     throw new Error(
-      `Too many inline images: found ${uniqInline.length}, max is ${MAX_IMAGE_COUNT}`
+      `Too many inline images: found ${uniqEarlyInline.length}, max is ${MAX_IMAGE_COUNT}`
     );
   }
 
@@ -305,8 +347,22 @@ async function run() {
     return await reject("Unable to parse frontmatter: " + e.message);
   }
 
+  // parse Markdown body once
+  const tokens = md.parse(parsed.content, {});
+
+  // early inline‐image count check (exclude featured image)
+  const inlineUrls = extractImageUrls(tokens);
+  const uniqInline = [...new Set(inlineUrls.filter(u => u !== parsed.data.featuredImage))];
+  if (uniqInline.length > MAX_IMAGE_COUNT) {
+    throw new Error(
+      `Too many inline images: found ${uniqInline.length}, max is ${MAX_IMAGE_COUNT}`
+    );
+  }
+
+  // frontmatter + content validation
   const frontmatterResult = validateFrontmatter(parsed.data);
-  const contentResult = validateMarkdownContent(parsed.content);
+  const contentResult = validateMarkdownContent(parsed.content, tokens);
+
   let allErrors = [...frontmatterResult.errors, ...contentResult.errors];
 
   // only if no sync errors do we do the HEAD check
@@ -317,27 +373,20 @@ async function run() {
     }
 
     // 2) Inline images: each must be valid via isImageUrl()
-    const toks2 = md.parse(parsed.content, {});
-    const inline = [];
-    (function walk(nodes) {
-      for (const t of nodes) {
-        if (t.type === "image") {
-          const s = t.attrGet("src");
-          if (s) inline.push(s);
-        }
-        if (t.children) walk(t.children);
-      }
-    })(toks2);
-    const uniqInline = [...new Set(inline)];
-    const withoutFeat = uniqInline.filter(u => u !== parsed.data.featuredImage);
+    // reuse the tokens parsed once at top to extract all image URLs
+    const allInlineUrls = extractImageUrls(tokens)
+      .filter(u => u !== parsed.data.featuredImage);
+    const uniqInlineUrls = [...new Set(allInlineUrls)];
 
-    for (const url of uniqInline) {
+    for (const url of uniqInlineUrls) {
       if (!await isImageUrl(url)) {
         allErrors.push(`Inline image invalid, not an image, or too large: ${url}`);
       }
     }
-    if (withoutFeat.length > MAX_IMAGE_COUNT) {
-      allErrors.push(`Too many inline images: found ${withoutFeat.length}, max allowed is ${MAX_IMAGE_COUNT}.`);
+    if (uniqInlineUrls.length > MAX_IMAGE_COUNT) {
+      allErrors.push(
+        `Too many inline images: found ${uniqInlineUrls.length}, max allowed is ${MAX_IMAGE_COUNT}.`
+      );
     }
   }
 
