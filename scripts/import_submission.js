@@ -70,14 +70,13 @@ async function run() {
     issue_number: issueNumber
   });
 
-  // ── SKIP if there’s already an open or merged PR for this issue via helper
+  // ── ERROR OUT if there’s already an open or merged PR
   const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);
   if (conflict) {
-    console.log(
+    throw new Error(
       `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
-      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}); skipping.`
+      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}).`
     );
-    return;
   }
 
   const raw = formToFrontmatter(issue);
@@ -317,15 +316,14 @@ async function run() {
       tree: treeItems
     });
 
-    // ── RACE GUARD: re-check for an associated PR right before we commit
+    // ── ERROR OUT if a PR was opened in the meantime (race guard)
     const conflictBeforeCommit = await findAssociatedPr(octokit, owner, repo, issueNumber);
     if (conflictBeforeCommit) {
-      console.log(
+      throw new Error(
         `↩️ Issue #${issueNumber} got PR #${conflictBeforeCommit.number} ` +
         `(${conflictBeforeCommit.state}${conflictBeforeCommit.merged_at ? ", merged" : ""}); ` +
         `aborting import to avoid race condition.`
       );
-      return;
     }
 
     // 2d) make the commit
@@ -414,7 +412,9 @@ async function run() {
       labels: ["import-failed"]
     });
     await octokit.issues.lock({
-      owner, repo, issue_number: issueNumber,
+      owner,
+      repo,
+      issue_number: issueNumber,
       lock_reason: "resolved"
     });
 

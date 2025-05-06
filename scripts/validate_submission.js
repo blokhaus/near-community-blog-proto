@@ -255,14 +255,13 @@ async function run() {
     lock_reason: "resolved"
   });
 
-  // ── NEW: bail if there’s already an open or merged PR for this issue via bot comments
+  // ── ERROR OUT if there’s already an open or merged PR for this issue
   const conflict = await findAssociatedPr(octokit, owner, repo, issueNumber);
   if (conflict) {
-    console.log(
-      `↩️ Issue #${issueNumber} already has PR #${conflict.number} ` +
-      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}); skipping.`
+    return await reject(
+      `Issue #${issueNumber} already has an associated PR #${conflict.number} ` +
+      `(${conflict.state}${conflict.merged_at ? ", merged" : ""}).`
     );
-    return;
   }
 
   const issueBody = issue.body;
