@@ -32,7 +32,7 @@ Your submission will need to include:
 2. **Validation scripts** check your input and content format
 3. **If valid**, a pull request (PR) is automatically created
 4. **Approvers review** the content in the PR
-5. **If approved,** the PR is merged and the article is published live on the NEAR website
+5. **If approved**, the PR is merged and the article is published live on the NEAR website
 
 🗂️ Finalized content lives in content/posts/, ready for consumption by the frontend.
 
