@@ -245,6 +245,18 @@ async function run() {
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const issueNumber = Number(process.env.ISSUE_NUMBER);
 
+  // ── remove any existing valid-submission label (ignore 404 if it’s not there)
+  try {
+    await octokit.issues.removeLabel({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      name: "valid-submission"
+    });
+  } catch (err) {
+    // label wasn’t present, no action needed
+  }
+
   // lock immediately to prevent mid‐stream edits
   await octokit.issues.lock({
     owner,
