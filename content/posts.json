@@ -1,5 +1,12 @@
 [
   {
+    "title": "One more test",
+    "featuredImage": "https://raw.githubusercontent.com/blokhaus/near-community-blog-proto/main/content/posts/2025-05-06-2025-05-06T22-50-49-269Z-one-more-test/images/8dcdf16e-05d3-46f7-ba7c-4bbae8c98ed5.jpeg",
+    "slug": "06-2025-05-06T22-50-49-269Z-one-more-test",
+    "subject": "Developers",
+    "githubPath": "https://raw.githubusercontent.com/blokhaus/near-community-blog-proto/main/content/posts/2025-05-06-2025-05-06T22-50-49-269Z-one-more-test"
+  },
+  {
     "title": "A Few Further Thoughts",
     "featuredImage": "https://raw.githubusercontent.com/blokhaus/near-community-blog-proto/main/content/posts/2025-05-06-2025-05-06T17-52-43-820Z-a-few-further-thoughts/images/a6f6839e-5236-492c-843f-22e2dfc6dff9.jpeg",
     "slug": "06-2025-05-06T17-52-43-820Z-a-few-further-thoughts",
