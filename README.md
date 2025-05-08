@@ -57,7 +57,7 @@ For a breakdown of how validation, approval, and pull request workflows operate,
 
 ---
 
-## 🌐 Publishing & Frontend INtegration
+## 🌐 Publishing & Frontend Integration
 
 This repository is focused on managing the submission and editorial process.
 
