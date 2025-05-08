@@ -14,19 +14,23 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       ISSUE: ''
     steps:
-      - name: Extract linked issue number from bot comment
+      - name: Extract linked issue number from PR body
         id: parse
         run: |
-          PR_NUM=${{ github.event.pull_request.number }}
-          COMMENTS=$(gh api \
-            repos/$GITHUB_REPOSITORY/issues/$PR_NUM/comments \
-            --jq '.[] | select(.user.login=="github-actions") | .body')
+          # grab the PR description
+          BODY="${{ github.event.pull_request.body }}"
+          echo "PR body:" >&2
+          echo "$BODY" >&2
+
+          # pull out “This blog post was submitted via [issue #NN]”
           ISSUE=$(
-            grep -oE 'This blog post was submitted via \[issue #[0-9]+\]' <<< "$COMMENTS" \
+            grep -oE 'This blog post was submitted via \[issue #[0-9]+\]' <<< "$BODY" \
             | head -1 \
             | grep -oE '[0-9]+'
           )
-          echo "ISSUE=${ISSUE}" >> $GITHUB_ENV
+
+          echo "Extracted ISSUE=$ISSUE" >&2
+          echo "ISSUE=$ISSUE" >> $GITHUB_ENV
 
       - name: Log if no linked blog issue
         if: ${{ env.ISSUE == '' }}
