@@ -7,14 +7,22 @@ jobs:
   unlock-if-unmerged:
     if: ${{ github.event.pull_request.merged == false }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Extract linked issue number
+      - name: Extract linked issue number from bot comment
         id: parse
         run: |
-          ISSUE=$(echo "${{ github.event.pull_request.body }}" \
-            | grep -oE 'Closes #[0-9]+' \
+          PR_NUM=${{ github.event.pull_request.number }}
+          # fetch only the issue comments (the PR conversation)…
+          COMMENTS=$(gh api \
+            repos/$GITHUB_REPOSITORY/issues/$PR_NUM/comments \
+            --jq '.[] | select(.user.login=="github-actions") | .body')
+          # look for the “submitted via issue #NNN” line
+          ISSUE=$(echo "$COMMENTS" \
+            | grep -oE 'submitted via issue #[0-9]+' \
             | head -1 \
-            | sed 's/Closes #//')
+            | grep -oE '[0-9]+')
           echo "ISSUE=${ISSUE}" >> $GITHUB_ENV
 
       - name: Log if no linked blog issue
