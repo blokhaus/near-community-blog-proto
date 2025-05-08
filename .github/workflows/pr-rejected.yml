@@ -38,4 +38,4 @@ jobs:
 
       - name: Unlock linked issue
         if: ${{ env.ISSUE != '' }}
-        run: gh api repos/$GITHUB_REPOSITORY/issues/${ISSUE}/unlock
+        run: gh issue unlock ${ISSUE} --repo $GITHUB_REPOSITORY
