@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      ISSUE: ''
     steps:
       - name: Extract linked issue number from bot comment
         id: parse
@@ -20,10 +21,11 @@ jobs:
           COMMENTS=$(gh api \
             repos/$GITHUB_REPOSITORY/issues/$PR_NUM/comments \
             --jq '.[] | select(.user.login=="github-actions") | .body')
-          ISSUE=$(echo "$COMMENTS" \
-            | grep -oE 'This blog post was submitted via \[issue #[0-9]+\]' \    # match the “[issue #NN]” link
+          ISSUE=$(
+            grep -oE 'This blog post was submitted via \[issue #[0-9]+\]' <<< "$COMMENTS" \
             | head -1 \
-            | grep -oE '[0-9]+')                              # pull out just the digits
+            | grep -oE '[0-9]+'
+          )
           echo "ISSUE=${ISSUE}" >> $GITHUB_ENV
 
       - name: Log if no linked blog issue
