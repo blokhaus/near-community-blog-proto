@@ -3,6 +3,9 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  issues: write
+
 jobs:
   unlock-if-unmerged:
     if: ${{ github.event.pull_request.merged == false }}
@@ -14,22 +17,19 @@ jobs:
         id: parse
         run: |
           PR_NUM=${{ github.event.pull_request.number }}
-          # fetch only the issue comments (the PR conversation)…
           COMMENTS=$(gh api \
             repos/$GITHUB_REPOSITORY/issues/$PR_NUM/comments \
             --jq '.[] | select(.user.login=="github-actions") | .body')
-          # look for the “submitted via issue #NNN” line
           ISSUE=$(echo "$COMMENTS" \
-            | grep -oE 'submitted via issue #[0-9]+' \
+            | grep -oE 'This blog post was submitted via \[issue #[0-9]+\]' \    # match the “[issue #NN]” link
             | head -1 \
-            | grep -oE '[0-9]+')
+            | grep -oE '[0-9]+')                              # pull out just the digits
           echo "ISSUE=${ISSUE}" >> $GITHUB_ENV
 
       - name: Log if no linked blog issue
         if: ${{ env.ISSUE == '' }}
-        run: echo "No linked blog issue found in PR body; skipping unlock."
+        run: echo "No linked blog issue found; skipping unlock."
 
       - name: Unlock linked issue
         if: ${{ env.ISSUE != '' }}
-        run: |
-          gh api repos/$GITHUB_REPOSITORY/issues/${ISSUE}/unlock
+        run: gh api repos/$GITHUB_REPOSITORY/issues/${ISSUE}/unlock
